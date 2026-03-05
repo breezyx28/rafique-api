@@ -1,0 +1,126 @@
+# Deploy to server (npm run deploy)
+
+This document describes how to deploy the **NestJS API** build to the server using **only** `npm run deploy`. No GitHub Actions, no manual FTP—just one command.
+
+---
+
+## What `npm run deploy` does
+
+1. **Build** – Runs `npm run build` (NestJS/TypeScript compile). Output goes to the `dist/` folder.
+2. **Zip** – Creates a deploy zip with the **contents** of `dist/` (compiled JS, etc. at the root of the archive).
+3. **Upload** – Copies the zip to the server via **SCP** (SSH key only, no password).
+4. **Extract on server** – **SSH** into the server and:
+   - Ensures `public_html/rafique/api/` exists
+   - Clears that folder
+   - Unzips the build into `public_html/rafique/api/`
+   - Deletes the zip on the server
+5. **Cleanup** – Deletes the local zip.
+
+Result: the **API** is updated at **`public_html/rafique/api/`** with the latest build.
+
+---
+
+## Prerequisites
+
+- **Node.js** (and npm) installed so `npm run build` works.
+- **OpenSSH** (or Git for Windows) so `scp` and `ssh` are in your PATH.
+- **SSH key** for `kattop@kat.sd` set up so you can log in without a password.
+
+---
+
+## One-time setup
+
+### 1. SSH key for the server
+
+You must be able to run:
+
+```bash
+ssh kattop@kat.sd
+```
+
+and get a shell **without** being asked for a password.
+
+- If you already have a key (e.g. `~/.ssh/id_rsa` or `~/.ssh/id_ed25519`) and it’s added to the server’s `~/.ssh/authorized_keys`, you’re done.
+- If not:
+  - Generate a key: `ssh-keygen -t ed25519 -C "your@email"` (or `-t rsa`).
+  - Copy it to the server: `ssh-copy-id kattop@kat.sd` (or add the contents of `~/.ssh/id_ed25519.pub` to `~/.ssh/authorized_keys` on the server).
+
+Test:
+
+```bash
+ssh kattop@kat.sd "echo ok"
+```
+
+You should see `ok` and no password prompt.
+
+### 2. Environment file (optional)
+
+The deploy script uses these defaults:
+
+- **Host:** `kat.sd`
+- **User:** `kattop`
+- **Remote path:** `public_html/rafique/api`
+
+To override them (or to use a specific SSH key), create a `.env` file in the **project root** (same folder as `package.json`):
+
+```env
+# SCP deploy (SSH key only)
+SSH_HOST=kat.sd
+SSH_USER=kattop
+REMOTE_DIR=public_html/rafique/api
+```
+
+Optional:
+
+- **SSH_KEY** – Path to your private key if you don’t use the default (e.g. `~/.ssh/id_rsa` or `C:\Users\You\.ssh\id_rsa`).
+
+Example with custom key:
+
+```env
+SSH_HOST=kat.sd
+SSH_USER=kattop
+REMOTE_DIR=public_html/rafique/api
+SSH_KEY=C:\Users\YourName\.ssh\id_rsa
+```
+
+`.env` is in `.gitignore`; don’t commit it.
+
+---
+
+## How to deploy
+
+From the project root (where `package.json` is), run:
+
+```bash
+npm run deploy
+```
+
+That’s it. The script will:
+
+1. Build the API
+2. Zip the build
+3. Upload via SCP
+4. SSH in and extract into `public_html/rafique/api/`
+
+No extra steps. Use **only** this command to deploy.
+
+---
+
+## Troubleshooting
+
+| Problem | What to check |
+|--------|----------------|
+| `scp: command not found` or `ssh: command not found` | Install OpenSSH or use Git for Windows (Git Bash). Ensure `scp` and `ssh` are in your PATH. |
+| Password prompt when running deploy | Your default SSH key isn’t used for `kattop@kat.sd`. Add your public key to the server’s `authorized_keys`, or set `SSH_KEY` in `.env` to the correct private key path. |
+| `Permission denied (publickey)` | Same as above: fix SSH key setup for `kattop@kat.sd`. |
+| Build fails | Run `npm run build` alone and fix any TypeScript/NestJS errors. |
+| Remote path wrong | Set `REMOTE_DIR` in `.env` (e.g. `public_html/rafique/api`). Path is relative to the SSH user’s home directory. |
+
+---
+
+## Summary
+
+- **One command:** `npm run deploy`
+- **Auth:** SSH key only (no password)
+- **Target on server:** `public_html/rafique/api/` (configurable via `REMOTE_DIR`)
+- **Flow:** Build → zip → SCP upload → SSH extract and cleanup
