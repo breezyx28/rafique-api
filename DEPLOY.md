@@ -8,14 +8,15 @@ This document describes how to deploy the **NestJS API** build to the server usi
 
 1. **Build** – Runs `npm run build` (NestJS/TypeScript compile). Output goes to the `dist/` folder.
 2. **Production env** – Copies `.env.production` into `dist/.env` so the deployed app uses production config (DB, `NODE_ENV`, etc.).
-3. **Zip** – Creates a deploy zip with the **contents** of `dist/` (compiled JS and `.env` at the root of the archive).
-4. **Upload** – Copies the zip to the server via **SCP** (SSH key only, no password).
-5. **Extract on server** – **SSH** into the server and:
+3. **Package** – Copies `package.json` into `dist/` so the server has it for installs or process managers.
+4. **Zip** – Creates a deploy zip with the **contents** of `dist/` (compiled JS, `.env`, and `package.json` at the root of the archive).
+5. **Upload** – Copies the zip to the server via **SCP** (SSH key only, no password).
+6. **Extract on server** – **SSH** into the server and:
    - Ensures `public_html/rafique/api/` exists
    - Clears that folder
    - Unzips the build into `public_html/rafique/api/`
    - Deletes the zip on the server
-6. **Cleanup** – Deletes the local zip.
+7. **Cleanup** – Deletes the local zip.
 
 Result: the **API** is updated at **`public_html/rafique/api/`** with the latest build.
 
