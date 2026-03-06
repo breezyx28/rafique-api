@@ -118,6 +118,25 @@ No extra steps. Use **only** this command to deploy.
 
 ---
 
+## Seeding the database (production)
+
+After the first deploy (or when the production DB is empty), seed it from your **local machine** so the production database gets the default admin role and user. The seed uses your **`.env.production`** credentials to connect to the production DB.
+
+From the project root:
+
+```bash
+npm run seed:prod
+```
+
+(or `bun run seed:prod`)
+
+This runs the same seed as `npm run seed` but loads `.env.production` instead of `.env`, so it connects to the production database and creates the default Admin role and `admin` / `admin` user if they don’t exist.
+
+- Run it **once** after the first deploy, or whenever you need to reset/restore default data.
+- You do **not** need to SSH into the server; run it from your machine where the repo and `.env.production` live.
+
+---
+
 ## Troubleshooting
 
 | Problem | What to check |
