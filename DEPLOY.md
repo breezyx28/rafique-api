@@ -120,20 +120,35 @@ No extra steps. Use **only** this command to deploy.
 
 ## Seeding the database (production)
 
-After the first deploy (or when the production DB is empty), seed it from your **local machine** so the production database gets the default admin role and user. The seed uses your **`.env.production`** credentials to connect to the production DB.
+After the first deploy (or when the production DB is empty), run the seed so the production database gets the default Admin role and `admin` / `admin` user. You can do it **on the server** or **from your machine**.
 
-From the project root:
+### On the server (recommended)
+
+The deploy includes a compiled `seed.js`. SSH into the server, go to the API directory (e.g. `public_html/rafique/api/`), then run:
+
+```bash
+npm run seed:server
+```
+
+or:
+
+```bash
+node seed.js
+```
+
+The app uses the `.env` in that folder (production credentials from the deploy).
+
+### From your machine
+
+From the **project root** (where you have the repo and `.env.production`), run:
 
 ```bash
 npm run seed:prod
 ```
 
-(or `bun run seed:prod`)
+(or `bun run seed:prod`). This connects to the production DB using `.env.production` and runs the same seed logic.
 
-This runs the same seed as `npm run seed` but loads `.env.production` instead of `.env`, so it connects to the production database and creates the default Admin role and `admin` / `admin` user if they don’t exist.
-
-- Run it **once** after the first deploy, or whenever you need to reset/restore default data.
-- You do **not** need to SSH into the server; run it from your machine where the repo and `.env.production` live.
+Run the seed **once** after the first deploy, or whenever you need to restore default data.
 
 ---
 

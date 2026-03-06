@@ -58,27 +58,33 @@ async function main() {
   }
   fs.copyFileSync(ENV_PRODUCTION, path.join(DIST, '.env'));
 
-  console.log('3. Copying package.json to build...');
+  console.log('3. Compiling seed for server...');
+  const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+  run(
+    `node "${tscPath}" src/seed.ts --outDir dist --rootDir src --module commonjs --esModuleInterop --skipLibCheck --resolveJsonModule --target ES2021`
+  );
+
+  console.log('4. Copying package.json to build...');
   fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(DIST, 'package.json'));
 
-  console.log('4. Zipping dist...');
+  console.log('5. Zipping dist...');
   await zipDir(DIST, ZIP_PATH);
   console.log('   Created', ZIP_PATH);
 
-  console.log('5. Uploading via SCP...');
+  console.log('6. Uploading via SCP...');
   const scpCmd = scpOpts
     ? `scp ${scpOpts} "${ZIP_PATH}" ${sshTarget}:~/deploy.zip`
     : `scp "${ZIP_PATH}" ${sshTarget}:~/deploy.zip`;
   run(scpCmd);
 
-  console.log('6. Extracting on server...');
+  console.log('7. Extracting on server...');
   const remoteCmd = `mkdir -p "${REMOTE_DIR}" && rm -rf "${REMOTE_DIR}"/* && unzip -o ~/deploy.zip -d "${REMOTE_DIR}" && rm ~/deploy.zip`;
   const sshCmd = sshOpts
     ? `ssh ${sshOpts} ${sshTarget} "${remoteCmd}"`
     : `ssh ${sshTarget} "${remoteCmd}"`;
   run(sshCmd);
 
-  console.log('7. Cleanup local zip...');
+  console.log('8. Cleanup local zip...');
   fs.unlinkSync(ZIP_PATH);
 
   console.log('Done. API deployed to', `${sshTarget}:${REMOTE_DIR}`);
