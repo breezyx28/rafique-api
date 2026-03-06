@@ -46,28 +46,36 @@ function zipDir(dirPath, outPath) {
   });
 }
 
+const ENV_PRODUCTION = path.join(ROOT, '.env.production');
+
 async function main() {
   console.log('1. Building...');
   run('bun run build');
 
-  console.log('2. Zipping dist...');
+  console.log('2. Replacing .env in build with .env.production...');
+  if (!fs.existsSync(ENV_PRODUCTION)) {
+    throw new Error('.env.production not found. Create it with production DB and app config.');
+  }
+  fs.copyFileSync(ENV_PRODUCTION, path.join(DIST, '.env'));
+
+  console.log('3. Zipping dist...');
   await zipDir(DIST, ZIP_PATH);
   console.log('   Created', ZIP_PATH);
 
-  console.log('3. Uploading via SCP...');
+  console.log('4. Uploading via SCP...');
   const scpCmd = scpOpts
     ? `scp ${scpOpts} "${ZIP_PATH}" ${sshTarget}:~/deploy.zip`
     : `scp "${ZIP_PATH}" ${sshTarget}:~/deploy.zip`;
   run(scpCmd);
 
-  console.log('4. Extracting on server...');
+  console.log('5. Extracting on server...');
   const remoteCmd = `mkdir -p "${REMOTE_DIR}" && rm -rf "${REMOTE_DIR}"/* && unzip -o ~/deploy.zip -d "${REMOTE_DIR}" && rm ~/deploy.zip`;
   const sshCmd = sshOpts
     ? `ssh ${sshOpts} ${sshTarget} "${remoteCmd}"`
     : `ssh ${sshTarget} "${remoteCmd}"`;
   run(sshCmd);
 
-  console.log('5. Cleanup local zip...');
+  console.log('6. Cleanup local zip...');
   fs.unlinkSync(ZIP_PATH);
 
   console.log('Done. API deployed to', `${sshTarget}:${REMOTE_DIR}`);

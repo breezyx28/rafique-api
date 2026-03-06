@@ -7,14 +7,15 @@ This document describes how to deploy the **NestJS API** build to the server usi
 ## What `npm run deploy` does
 
 1. **Build** – Runs `npm run build` (NestJS/TypeScript compile). Output goes to the `dist/` folder.
-2. **Zip** – Creates a deploy zip with the **contents** of `dist/` (compiled JS, etc. at the root of the archive).
-3. **Upload** – Copies the zip to the server via **SCP** (SSH key only, no password).
-4. **Extract on server** – **SSH** into the server and:
+2. **Production env** – Copies `.env.production` into `dist/.env` so the deployed app uses production config (DB, `NODE_ENV`, etc.).
+3. **Zip** – Creates a deploy zip with the **contents** of `dist/` (compiled JS and `.env` at the root of the archive).
+4. **Upload** – Copies the zip to the server via **SCP** (SSH key only, no password).
+5. **Extract on server** – **SSH** into the server and:
    - Ensures `public_html/rafique/api/` exists
    - Clears that folder
    - Unzips the build into `public_html/rafique/api/`
    - Deletes the zip on the server
-5. **Cleanup** – Deletes the local zip.
+6. **Cleanup** – Deletes the local zip.
 
 Result: the **API** is updated at **`public_html/rafique/api/`** with the latest build.
 
@@ -84,6 +85,16 @@ SSH_KEY=C:\Users\YourName\.ssh\id_rsa
 ```
 
 `.env` is in `.gitignore`; don’t commit it.
+
+### 3. Production environment (`.env.production`)
+
+The deploy script **replaces** the build’s env with production config by copying `.env.production` into `dist/.env` before zipping. That way the server receives a `.env` file with production database and app settings—no manual `.env` on the server.
+
+- Create **`.env.production`** in the project root (same folder as `package.json`).
+- Put production values in it: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `NODE_ENV=production`, `PORT`, and any other vars the app needs.
+- **Do not commit** `.env.production`; add it to `.gitignore` (it contains secrets).
+
+The API loads `.env` at startup via `dotenv`, so when you run `node main.js` on the server, it will use the `.env` that was bundled in the deploy zip.
 
 ---
 
