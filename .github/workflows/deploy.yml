@@ -1,0 +1,97 @@
+# Deploy API to production server (rafique-api.kat-jr.com)
+# Flow: build -> add .env (from .env.production.enc) -> encrypt .env -> deploy -> on-server decrypt -> PM2
+
+name: Deploy API
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  SSH_HOST: rafique-api.kat-jr.com
+  DEPLOY_PATH: /var/www/html/rafique/api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # 1. Build folder
+      - name: Build
+        run: bun run build
+
+      # 2. Include production env in build as .env (decoded from .env.production.enc)
+      - name: Decode production .env into dist (as .env)
+        run: node scripts/decode-env.js
+        env:
+          ENV_SECRET: ${{ secrets.ENV_SECRET }}
+
+      - name: Compile seed for server
+        run: |
+          node node_modules/typescript/bin/tsc src/seed.ts --outDir dist --rootDir src \
+            --module commonjs --esModuleInterop --skipLibCheck --resolveJsonModule --target ES2021
+
+      - name: Copy package.json to dist
+        run: cp package.json dist/
+
+      # Copy decode script so server can decrypt .env.enc -> .env
+      - name: Copy decode script to dist
+        run: cp scripts/decode-env.js dist/
+
+      # 3. Encrypt .env for deploy (only .env.enc is deployed, not plain .env)
+      - name: Encrypt .env for deploy
+        run: node scripts/encrypt-env.js
+        env:
+          ENV_SECRET: ${{ secrets.ENV_SECRET }}
+
+      # SSH key: use the private key whose public key is on the server (see DEPLOY.md)
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Ensure deploy path on server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ env.SSH_HOST }} \
+            "mkdir -p ${{ env.DEPLOY_PATH }}"
+
+      # 4–5. Deploy build folder to server (rsync = upload + extract contents to destination)
+      - name: Deploy build folder to server
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            dist/ \
+            ${{ secrets.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+
+      # 6. On server: decrypt .env.enc -> .env, then run API with PM2
+      - name: On server – decrypt .env and run PM2
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ env.SSH_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && \
+             ENV_SECRET='${{ secrets.ENV_SECRET }}' node decode-env.js --inplace && \
+             if pm2 describe rafique-api >/dev/null 2>&1; then \
+               pm2 reload rafique-api --update-env; \
+             else \
+               pm2 start main.js --name rafique-api; \
+             fi && \
+             pm2 save && \
+             pm2 startup || true"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

@@ -3,20 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "bunx nest build",
-    "start": "bunx nest start",
-    "restart": "bun run build && bun run start",
-    "start:dev": "bunx nest start --watch",
+    "build": "npx nest build",
+    "start": "npx nest start",
+    "restart": "npm run build && npm run start",
+    "start:dev": "npx nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "bun run dist/main.js",
-    "db:test": "bun run src/test-db-connection.ts",
-    "seed": "bun run src/seed.ts",
+    "start:prod": "npm run dist/main.js",
+    "db:test": "npm run src/test-db-connection.ts",
+    "seed": "npm run src/seed.ts",
     "seed:prod": "node scripts/seed-prod.js",
     "seed:server": "node seed.js",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/typeorm.config.ts",
-    "migration:run": "npm run typeorm -- migration:run -d src/config/typeorm.config.ts",
-    "encode:env": "node scripts/encode-env.js"
+    "migration:run": "npm run typeorm -- migration:run -d src/config/typeorm.config.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
