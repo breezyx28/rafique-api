@@ -1,94 +1,109 @@
 # Deploy to server
 
-Deployment is done via **GitHub Actions** to **rafique-api.kat-jr.com** at `/var/www/html/rafique/api` (push to `master` or manual run).
+Deployment is done via **GitHub Actions** to **rafique-api.kat-jr.com**. The workflow does **not** build on the runner; it SSHs to the server and runs **git pull**, then **decode env**, **install**, **build**, and **PM2** there.
+
+- **Server:** `rafique-api.kat-jr.com` (IP: `178.104.33.83`)
+- **Deploy path (app root on server):** `/var/www/html/rafique/api`
+- **Triggers:** Push to `master`, or run manually via **Actions → Deploy API → Run workflow**
 
 ---
 
-## GitHub Actions (automated deploy)
+## Deployment flow (on the server)
 
-The workflow in `.github/workflows/deploy.yml` does the following:
+1. **git pull origin master** – get latest code.
+2. **Decode** `.env.production.enc` → `.env` in the repo root (using `ENV_SECRET` from GitHub Secrets).
+3. **bun install --frozen-lockfile** – install dependencies.
+4. **bun run build** – build the app (output in `dist/`).
+5. **PM2** – `pm2 reload rafique-api` or `pm2 start dist/main.js --name rafique-api`, then `pm2 save` and `pm2 startup`.
 
-1. **Build** the app (output in `dist/`).
-2. **Add production env to the build** – decodes `.env.production.enc` and writes it as `dist/.env`.
-3. **Encrypt** `dist/.env` → `dist/.env.enc` and remove plain `dist/.env` (so only the encrypted file is deployed).
-4. **Deploy** the build folder to the server via rsync (contents of `dist/` go to `/var/www/html/rafique/api`).
-5. **On the server:** decrypt `.env.enc` → `.env` in the deploy directory.
-6. **On the server:** run the API with PM2 (`pm2 start main.js --name rafique-api` or `pm2 reload rafique-api`), then `pm2 save` and `pm2 startup`.
+Production env stays encrypted in the repo (`.env.production.enc`); only the password is in GitHub Secrets. The server never stores the plain env in the repo; it is decoded at deploy time.
 
-- **Server:** `rafique-api.kat-jr.com` (IP: `178.104.33.83`)
-- **Deploy path:** `/var/www/html/rafique/api`
-- **Triggers:** Push to `master`, or run manually via **Actions → Deploy API → Run workflow**
+---
 
-### One-time setup
+## One-time setup
 
-**1. Create the deploy path on the server**
+**1. Clone the repo on the server**
 
-SSH into the server (from your local device) and ensure the directory exists and is writable by the user you use in the workflow:
+SSH into the server and clone the repository at the deploy path. Ensure the server can **git pull** (e.g. HTTPS with token, or SSH deploy key added to the repo):
 
 ```bash
 ssh your-user@rafique-api.kat-jr.com
-sudo mkdir -p /var/www/html/rafique/api
-sudo chown your-user:your-user /var/www/html/rafique/api
+sudo mkdir -p /var/www/html/rafique
+sudo chown your-user:your-user /var/www/html/rafique
+cd /var/www/html/rafique
+git clone <your-repo-url> api
+cd api
+git checkout master
 ```
 
-(Replace `your-user` with the same user you put in the `SSH_USER` secret below.)
+(Replace `<your-repo-url>` with the repo URL. If the repo is private, configure access: deploy key, token, etc.)
 
-**2. Encode production env and commit the encrypted file**
+**2. Install Node, Bun, and PM2 on the server**
 
-Production env is **not** stored in GitHub. You encrypt `.env.production` with a password and commit the encrypted file; only the **password** is stored as a secret.
-
-From the project root (with `.env.production` present and **not** committed):
+The workflow runs `bun install` and `bun run build`, and PM2 to run the app. Example (adjust for your OS):
 
 ```bash
-# Pick a strong password and use it both here and in GitHub Secrets (step 3).
+# Node (if not already installed)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Bun
+curl -fsSL https://bun.sh/install | bash
+
+# PM2
+npm install -g pm2
+```
+
+**3. Encode production env and commit the encrypted file**
+
+Production env is **not** stored in GitHub in plain form. You encrypt `.env.production` with a password and commit the encrypted file; only the **password** is stored as a secret.
+
+From your **local** project root (with `.env.production` present and **not** committed):
+
+```bash
 ENV_SECRET=your-secret-password node scripts/encode-env.js
 ```
 
-This creates **`.env.production.enc`**. Commit this file (it is safe to commit; it is encrypted). Ensure `.env.production` stays in `.gitignore`.
+This creates **`.env.production.enc`**. Commit and push it. Ensure `.env.production` stays in `.gitignore`.
 
-**3. Add GitHub Actions secrets**
+**4. Add GitHub Actions secrets**
 
 In the repo: **Settings → Secrets and variables → Actions**, add:
 
 | Secret             | Description |
 |--------------------|-------------|
-| `SSH_PRIVATE_KEY`  | **Which key?** The **private** key that the **server** accepts for SSH login. That is usually the **same key you use on your local device** when you run `ssh user@rafique-api.kat-jr.com`. So: copy the contents of that private key (e.g. `~/.ssh/id_ed25519` or `~/.ssh/id_rsa`) into this secret. The server already has the matching **public** key in `~/.ssh/authorized_keys`. Do not use the server's own key; use the key that can **log into** the server. No passphrase, or the workflow cannot use it. |
-| `SSH_USER`         | SSH username for the server (e.g. `root`, `ubuntu`, or the user you use when you SSH from your laptop). |
-| `ENV_SECRET`       | The **password** you used when running `scripts/encode-env.js`. The workflow uses it to decode `.env.production.enc` → `dist/.env`, then encrypt to `dist/.env.enc` for deploy, and on the server to decrypt `.env.enc` → `.env`. |
+| `SSH_PRIVATE_KEY`  | The **private** key that the **server** accepts for SSH (same key you use to `ssh user@rafique-api.kat-jr.com`). Put its contents here. No passphrase. |
+| `SSH_USER`         | SSH username for the server. |
+| `ENV_SECRET`       | The **password** you used when running `scripts/encode-env.js`. The workflow uses it on the server to decode `.env.production.enc` → `.env` before build. |
 
-After that, every push to `master` (or a manual run of the workflow) will build, encrypt env, deploy, decrypt on the server, and start or reload the API with PM2 (`rafique-api`).
+After that, every push to `master` (or a manual run of the workflow) will trigger: on the server, **git pull** → **decode .env** → **bun install** → **bun run build** → **PM2** start/reload.
 
-**Changing production env later:** Edit `.env.production` locally, run `ENV_SECRET=your-password node scripts/encode-env.js` again, then commit the updated `.env.production.enc`.
+**Changing production env later:** Edit `.env.production` locally, run `ENV_SECRET=your-password node scripts/encode-env.js` again, commit the updated `.env.production.enc`, and push.
 
-**4. PM2 on the server (one-time)**
+**5. PM2 startup (one-time)**
 
-The workflow runs `pm2 start main.js --name rafique-api` (or `pm2 reload rafique-api`) and then `pm2 save` and `pm2 startup`. Ensure PM2 is installed on the server (e.g. `npm install -g pm2`). If `pm2 startup` prints a command with `sudo`, run that once on the server so the app starts on reboot.
+After the first deploy, if `pm2 startup` prints a command with `sudo`, run that once on the server so the app starts on reboot.
 
 ---
 
 ## Seeding the database (production)
 
-After the first deploy (or when the production DB is empty), run the seed so the production database gets the default Admin role and `admin` / `admin` user. You can do it **on the server** or **from your machine**.
+After the first deploy (or when the production DB is empty), run the seed.
 
-### On the server (recommended)
+### On the server
 
-The deploy includes a compiled `seed.js`. SSH into the server, go to the API directory (e.g. `/var/www/html/rafique/api/`), then run:
-
-```bash
-npm run seed:server
-```
-
-or:
+You have the full repo on the server. From the app directory:
 
 ```bash
-node seed.js
+cd /var/www/html/rafique/api
+bun run seed
 ```
 
-The app uses the `.env` in that folder (production credentials from the deploy).
+The app uses the `.env` in that directory (decoded at deploy time).
 
 ### From your machine
 
-From the **project root** (where you have the repo and `.env.production`), run:
+From the project root (with `.env.production` present):
 
 ```bash
 npm run seed:prod
@@ -96,14 +111,14 @@ npm run seed:prod
 
 (or `bun run seed:prod`). This connects to the production DB using `.env.production` and runs the same seed logic.
 
-Run the seed **once** after the first deploy, or whenever you need to restore default data.
-
 ---
 
 ## Troubleshooting
 
 | Problem | What to check |
 |--------|----------------|
-| `Permission denied (publickey)` | Ensure `SSH_PRIVATE_KEY` is the private key that the server accepts (same key you use to SSH from your laptop). |
-| Build fails | Run `bun run build` (or `npm run build`) locally and fix any errors. |
-| Workflow fails at decode/encrypt | Ensure `.env.production.enc` is committed and `ENV_SECRET` matches the password used with `scripts/encode-env.js`. |
+| `Permission denied (publickey)` | Ensure `SSH_PRIVATE_KEY` is the private key the server accepts (same as your SSH key to the server). |
+| `git pull` fails | Ensure the repo is cloned and the server can pull (deploy key, token, or HTTPS credentials). |
+| `.env.production.enc not found` | Run `scripts/encode-env.js` locally, commit `.env.production.enc`, and push. |
+| Decode fails | Ensure `ENV_SECRET` in GitHub Secrets matches the password used with `scripts/encode-env.js`. |
+| Build fails on server | SSH in and run `bun install` and `bun run build` manually; fix any errors. Ensure Bun and Node are installed. |

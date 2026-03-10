@@ -1,10 +1,10 @@
 /**
  * Decrypt env file using ENV_SECRET.
- * - CI: decrypt .env.production.enc -> dist/.env
- * - Server (--inplace): decrypt .env.enc -> .env in current directory
+ * - --to-root: decrypt .env.production.enc -> .env in repo root (for server: pull, then decode before build)
+ * - --inplace: decrypt .env.enc -> .env in current directory (legacy)
+ * - default: decrypt .env.production.enc -> dist/.env (legacy CI build)
  *
- * Usage (CI): ENV_SECRET=... node scripts/decode-env.js
- * Usage (server): cd /var/www/html/rafique/api && ENV_SECRET=... node decode-env.js --inplace
+ * Usage (server after git pull): ENV_SECRET=... node scripts/decode-env.js --to-root
  */
 const fs = require('fs');
 const path = require('path');
@@ -24,9 +24,10 @@ function main() {
     process.exit(1);
   }
 
+  const toRoot = process.argv.includes('--to-root');
   const inplace = process.argv.includes('--inplace');
   const encPath = inplace ? path.join(process.cwd(), '.env.enc') : path.join(ROOT, '.env.production.enc');
-  const outPath = inplace ? path.join(process.cwd(), '.env') : path.join(ROOT, 'dist', '.env');
+  const outPath = toRoot ? path.join(ROOT, '.env') : inplace ? path.join(process.cwd(), '.env') : path.join(ROOT, 'dist', '.env');
 
   if (!fs.existsSync(encPath)) {
     console.error(inplace ? '.env.enc not found in current directory.' : '.env.production.enc not found.');
