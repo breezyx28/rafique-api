@@ -30,8 +30,8 @@ jobs:
             "cd ${{ env.DEPLOY_PATH }} && \
              git pull origin master && \
              ENV_SECRET='${{ secrets.ENV_SECRET }}' node scripts/decode-env.js --to-root && \
-             bun install --frozen-lockfile && \
-             bun run build && \
+             npm install && \
+             npx nest build && \
              if pm2 describe rafique-api >/dev/null 2>&1; then \
                pm2 reload rafique-api --update-env; \
              else \
