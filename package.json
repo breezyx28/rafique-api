@@ -11,6 +11,7 @@
     "start:prod": "bun run dist/main.js",
     "db:test": "bun run src/test-db-connection.ts",
     "seed": "bun run src/seed.ts",
+    "seed:admin": "bun run src/seed-admin.ts",
     "seed:prod": "node scripts/seed-prod.js",
     "seed:server": "node seed.js",
     "typeorm": "typeorm-ts-node-commonjs",

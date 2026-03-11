@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { ProductField } from './product-field.entity';
+import type { ProductField } from './product-field.entity';
 
 export type LangCode = 'en' | 'ar' | 'bn';
 
@@ -17,7 +17,7 @@ export class ProductFieldI18n {
   @Column({ length: 255 })
   label: string;
 
-  @ManyToOne(() => ProductField, (f) => f.i18n, { onDelete: 'CASCADE' })
+  @ManyToOne('ProductField', 'i18n', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'field_id' })
   field: ProductField;
 }
