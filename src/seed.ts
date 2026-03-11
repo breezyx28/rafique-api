@@ -1,38 +1,47 @@
 /**
- * Run this once to create default role and admin user.
- * From api folder: bun run seed
+ * Seed: one admin user only.
+ * Username: admin
+ * Password: admin
+ *
+ * Run once: bun run seed  (or npm run seed)
+ * Creates Admin role if missing, then creates user "admin" / "admin" if that user doesn't exist.
  */
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { typeOrmConfig } from './config/typeorm.config';
 
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = 'admin';
+
 async function seed() {
-  const ds = new DataSource({ ...typeOrmConfig, synchronize: true });
+  const ds = new DataSource({ ...typeOrmConfig, synchronize: false });
   await ds.initialize();
 
-  const roles = await ds.query('SELECT id FROM roles LIMIT 1');
-  let roleId = roles[0]?.id;
-  if (!roleId) {
+  // Ensure Admin role exists
+  let [roleRow] = await ds.query('SELECT id FROM roles WHERE name = ? LIMIT 1', ['Admin']);
+  if (!roleRow) {
     await ds.query(
       `INSERT INTO roles (name, permissions) VALUES (?, ?)`,
       ['Admin', JSON.stringify(['*'])]
     );
-    const [row] = await ds.query('SELECT id FROM roles WHERE name = ?', ['Admin']);
-    roleId = row.id;
+    [roleRow] = await ds.query('SELECT id FROM roles WHERE name = ? LIMIT 1', ['Admin']);
   }
+  const roleId = roleRow.id;
 
-  const users = await ds.query('SELECT id FROM users LIMIT 1');
-  if (users.length === 0) {
-    const hash = await bcrypt.hash('admin', 10);
+  // Create admin user only if it doesn't exist
+  const [existing] = await ds.query('SELECT id FROM users WHERE username = ? LIMIT 1', [ADMIN_USERNAME]);
+  if (!existing) {
+    const hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
     await ds.query(
       `INSERT INTO users (username, passwordHash, role_id) VALUES (?, ?, ?)`,
-      ['admin', hash, roleId]
+      [ADMIN_USERNAME, hash, roleId]
     );
-    console.log('Created default user: admin / admin');
+    console.log(`Created admin user: ${ADMIN_USERNAME} / ${ADMIN_PASSWORD}`);
   } else {
-    console.log('Users already exist, skip seed.');
+    console.log(`Admin user "${ADMIN_USERNAME}" already exists, skip.`);
   }
+
   await ds.destroy();
 }
 
