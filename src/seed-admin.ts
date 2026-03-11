@@ -1,20 +1,37 @@
 /**
  * Admin seed: creates only the admin user (and Admin role if missing).
- * Does not touch any other tables.
+ * Does not touch any other tables. Uses a connection-only DataSource (no entities)
+ * so other entity files (Order, Product, etc.) are never loaded.
  *
  * Run: bun run seed:admin  (or npm run seed:admin)
  * Username: admin / Password: admin
  */
-import 'reflect-metadata';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+dotenv.config({
+  path: process.env.DOTENV_CONFIG_PATH
+    ? path.resolve(process.cwd(), process.env.DOTENV_CONFIG_PATH)
+    : path.resolve(process.cwd(), '.env'),
+});
+
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { typeOrmConfig } from './config/typeorm.config';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'admin';
 
 async function seedAdmin() {
-  const ds = new DataSource({ ...typeOrmConfig, synchronize: false });
+  const ds = new DataSource({
+    type: 'mysql',
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    username: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'rafique_tailors_db',
+    entities: [],
+    synchronize: false,
+  });
   await ds.initialize();
 
   // Ensure Admin role exists (only table we touch besides users)
