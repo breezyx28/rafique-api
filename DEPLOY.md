@@ -14,7 +14,8 @@ Deployment is done via **GitHub Actions** to **rafique-api.kat-jr.com**. The wor
 2. **Decode** `.env.production.enc` → `.env` in the repo root (using `ENV_SECRET` from GitHub Secrets).
 3. **npm install** – install dependencies.
 4. **npx nest build** – build the app (output in `dist/`).
-5. **PM2** – `pm2 reload rafique-api` or `pm2 start dist/main.js --name rafique-api`, then `pm2 save` and `pm2 startup`.
+5. **npm run migration:run** – run any pending TypeORM migrations (so the DB schema is up to date).
+6. **PM2** – `pm2 delete rafique-api` (if any), then `pm2 start dist/main.js --name rafique-api`, then `pm2 save` and `pm2 startup`.
 
 Production env stays encrypted in the repo (`.env.production.enc`); only the password is in GitHub Secrets. The server never stores the plain env in the repo; it is decoded at deploy time.
 

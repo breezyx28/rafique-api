@@ -32,6 +32,7 @@ jobs:
              ENV_SECRET='${{ secrets.ENV_SECRET }}' node scripts/decode-env.js --to-root && \
              npm install && \
              npx nest build && \
+             npm run migration:run && \
              pm2 delete rafique-api 2>/dev/null || true && \
              pm2 start dist/main.js --name rafique-api && \
              pm2 save && \
