@@ -13,11 +13,15 @@ import { OrdersService } from './orders.service';
 import { CreateCustomOrderDto } from './dto/create-custom-order.dto';
 import { CreateReadyOrderDto } from './dto/create-ready-order.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { PaginationDto } from '../../common/dto/pagination.dto';
-import { OrderType, OrderStatus } from './entities/order.entity';
+import { OrdersQueryDto } from './dto/orders-query.dto';
+import { CreateFabricOrderDto } from './dto/create-fabric-order.dto';
+import { UpdateCustomOrderDto } from './dto/update-order-item-fabric.dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('Admin', 'Cashier')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
@@ -31,15 +35,15 @@ export class OrdersController {
     return this.ordersService.createReady(dto);
   }
 
+  @Post('fabric')
+  async createFabric(@Body() dto: CreateFabricOrderDto) {
+    return this.ordersService.createFabricOrder(dto);
+  }
+
   @Get()
-  async findAll(
-    @Query() pagination: PaginationDto,
-    @Query('type') type?: OrderType,
-    @Query('status') status?: OrderStatus,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    return this.ordersService.findAll(pagination, { type, status, from, to });
+  async findAll(@Query() query: OrdersQueryDto) {
+    const { page, limit, type, status, from, to } = query;
+    return this.ordersService.findAll({ page, limit }, { type, status, from, to });
   }
 
   @Get(':id')
@@ -50,7 +54,7 @@ export class OrdersController {
   @Patch(':id')
   async update(
     @Param('id') id: string,
-    @Body() body: { status?: OrderStatus; paid?: number },
+    @Body() body: UpdateCustomOrderDto,
   ) {
     return this.ordersService.update(parseInt(id, 10), body);
   }

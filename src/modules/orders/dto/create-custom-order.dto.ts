@@ -30,6 +30,13 @@ export class OrderItemDto {
   @IsNumber()
   unitPrice: number;
 
+  @IsNumber()
+  fabricId: number;
+
+  @IsNumber()
+  @Min(0.01)
+  fabricMeters: number;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrderItemMeasurementDto)

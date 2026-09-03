@@ -9,10 +9,12 @@ import {
 } from 'typeorm';
 import { Customer } from '../../customers/entities/customer.entity';
 import { OrderItem } from './order-item.entity';
+import { OrderFabricSale } from './order-fabric-sale.entity';
 
 export enum OrderType {
   CUSTOM = 'custom',
   READY = 'ready',
+  FABRIC = 'fabric',
 }
 
 export enum OrderStatus {
@@ -35,6 +37,15 @@ export class Order {
 
   @Column({ name: 'order_number', unique: true, length: 50 })
   orderNumber: string;
+
+  @Column({
+    name: 'receipt_number',
+    type: 'varchar',
+    unique: true,
+    length: 50,
+    nullable: true,
+  })
+  receiptNumber: string | null;
 
   @Column({ name: 'customer_id', nullable: true })
   customerId: number | null;
@@ -66,6 +77,12 @@ export class Order {
   @Column({ name: 'note_workshop', type: 'text', nullable: true })
   noteWorkshop: string | null;
 
+  @Column({ name: 'workshop_delivered_at', type: 'datetime', nullable: true })
+  workshopDeliveredAt: Date | null;
+
+  @Column({ name: 'ready_for_receive_at', type: 'datetime', nullable: true })
+  readyForReceiveAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
@@ -75,4 +92,7 @@ export class Order {
 
   @OneToMany(() => OrderItem, (oi) => oi.order)
   items: OrderItem[];
+
+  @OneToMany(() => OrderFabricSale, (row) => row.order)
+  fabricSales: OrderFabricSale[];
 }

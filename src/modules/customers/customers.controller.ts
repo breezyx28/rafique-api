@@ -13,11 +13,14 @@ import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { OrdersService } from '../orders/orders.service';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { CustomersQueryDto } from './dto/customers-query.dto';
 
 @Controller('customers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('Admin', 'Cashier')
 export class CustomersController {
   constructor(
     private readonly customersService: CustomersService,
@@ -25,12 +28,9 @@ export class CustomersController {
   ) {}
 
   @Get()
-  async findAll(
-    @Query() pagination: PaginationDto,
-    @Query('search') search?: string,
-    @Query('phone') phone?: string,
-  ) {
-    return this.customersService.findAll(pagination, search, phone);
+  async findAll(@Query() query: CustomersQueryDto) {
+    const { page, limit, search, phone } = query;
+    return this.customersService.findAll({ page, limit }, search, phone);
   }
 
   @Get('list')

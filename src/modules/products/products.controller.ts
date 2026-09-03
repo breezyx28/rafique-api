@@ -15,9 +15,12 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateProductFieldDto } from './dto/create-product-field.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ProductType } from './entities/product.entity';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller('products')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('Admin', 'Cashier')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
@@ -32,16 +35,19 @@ export class ProductsController {
   }
 
   @Post()
+  @Roles('Admin')
   async create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
   }
 
   @Patch(':id')
+  @Roles('Admin')
   async update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.productsService.update(parseInt(id, 10), dto);
   }
 
   @Delete(':id')
+  @Roles('Admin')
   async remove(@Param('id') id: string) {
     return this.productsService.remove(parseInt(id, 10));
   }
@@ -52,6 +58,7 @@ export class ProductsController {
   }
 
   @Post(':id/fields')
+  @Roles('Admin')
   async addField(
     @Param('id') id: string,
     @Body() dto: CreateProductFieldDto,
@@ -60,6 +67,7 @@ export class ProductsController {
   }
 
   @Patch('fields/:fieldId')
+  @Roles('Admin')
   async updateField(
     @Param('fieldId') fieldId: string,
     @Body() dto: Partial<CreateProductFieldDto>,
@@ -68,6 +76,7 @@ export class ProductsController {
   }
 
   @Delete('fields/:fieldId')
+  @Roles('Admin')
   async removeField(@Param('fieldId') fieldId: string) {
     return this.productsService.removeField(parseInt(fieldId, 10));
   }

@@ -12,4 +12,8 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   basePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  sewingPrice?: number;
 }

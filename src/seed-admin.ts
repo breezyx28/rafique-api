@@ -45,6 +45,17 @@ async function seedAdmin() {
   }
   const roleId = roleRow.id;
 
+  const [workshopRole] = await ds.query(
+    'SELECT id FROM roles WHERE name = ? LIMIT 1',
+    ['Workshop'],
+  );
+  if (!workshopRole) {
+    await ds.query(
+      `INSERT INTO roles (name, permissions) VALUES (?, ?)`,
+      ['Workshop', JSON.stringify(['workshop:read', 'workshop:update'])],
+    );
+  }
+
   // Create admin user only if it doesn't exist
   const [existing] = await ds.query('SELECT id FROM users WHERE username = ? LIMIT 1', [ADMIN_USERNAME]);
   if (!existing) {

@@ -12,7 +12,28 @@ export class CreateFabricDto {
   @Min(0)
   qty: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  costPerUnit: number;
+  costPerUnit?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  packageMeters?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  packagePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sellingPricePerMeter?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sewingRatePerMeter?: number;
 }

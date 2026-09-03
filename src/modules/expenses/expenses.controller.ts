@@ -13,10 +13,13 @@ import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateExpenseTypeDto } from './dto/create-expense-type.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { ExpensesQueryDto } from './dto/expenses-query.dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller('expenses')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('Admin')
 export class ExpensesController {
   constructor(private readonly expensesService: ExpensesService) {}
 
@@ -31,17 +34,13 @@ export class ExpensesController {
   }
 
   @Get()
-  async findAll(
-    @Query() pagination: PaginationDto,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('type') typeId?: string,
-  ) {
+  async findAll(@Query() query: ExpensesQueryDto) {
+    const { page, limit, from, to, type } = query;
     return this.expensesService.findAll(
-      pagination,
+      { page, limit },
       from,
       to,
-      typeId ? parseInt(typeId, 10) : undefined,
+      type,
     );
   }
 

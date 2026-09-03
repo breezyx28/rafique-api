@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InventoryItem } from './entities/inventory-item.entity';
@@ -7,6 +7,7 @@ import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { CreateFabricDto } from './dto/create-fabric.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Product, ProductType } from '../products/entities/product.entity';
 
 @Injectable()
 export class InventoryService {
@@ -15,6 +16,8 @@ export class InventoryService {
     private itemRepo: Repository<InventoryItem>,
     @InjectRepository(Fabric)
     private fabricRepo: Repository<Fabric>,
+    @InjectRepository(Product)
+    private productRepo: Repository<Product>,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -30,10 +33,18 @@ export class InventoryService {
   }
 
   async createItem(dto: CreateInventoryItemDto) {
+    const product = await this.productRepo.findOneBy({ id: dto.productId });
+    if (!product) throw new NotFoundException('Product not found');
+    if (product.type !== ProductType.READY) {
+      throw new BadRequestException('Only ready products can be stocked');
+    }
     const item = this.itemRepo.create(dto);
     const saved = await this.itemRepo.save(item);
     await this.notificationsService.createStockNotificationIfNeeded(saved.id);
-    return saved;
+    return this.itemRepo.findOne({
+      where: { id: saved.id },
+      relations: ['product'],
+    });
   }
 
   async updateItem(id: number, dto: Partial<CreateInventoryItemDto>) {
@@ -62,15 +73,34 @@ export class InventoryService {
   }
 
   async createFabric(dto: CreateFabricDto) {
-    const fabric = this.fabricRepo.create(dto);
+    const fabric = this.fabricRepo.create(this.withPackagePricing(dto));
     return this.fabricRepo.save(fabric);
   }
 
   async updateFabric(id: number, dto: Partial<CreateFabricDto>) {
-    await this.fabricRepo.update(id, dto);
-    const fabric = await this.fabricRepo.findOne({ where: { id } });
-    if (!fabric) throw new NotFoundException('Fabric not found');
-    return fabric;
+    const current = await this.fabricRepo.findOne({ where: { id } });
+    if (!current) throw new NotFoundException('Fabric not found');
+    Object.assign(current, this.withPackagePricing({ ...current, ...dto }));
+    return this.fabricRepo.save(current);
+  }
+
+  private withPackagePricing<T extends Partial<CreateFabricDto>>(dto: T) {
+    const packageMeters = Number(dto.packageMeters ?? 20) || 20;
+    const packagePrice = Number(
+      dto.packagePrice ?? dto.costPerUnit ?? 0,
+    );
+    const sellingPricePerMeter =
+      packageMeters > 0 ? packagePrice / packageMeters : 0;
+    return {
+      ...dto,
+      packageMeters,
+      packagePrice,
+      costPerUnit: packagePrice,
+      sellingPricePerMeter:
+        dto.sellingPricePerMeter != null
+          ? Number(dto.sellingPricePerMeter)
+          : sellingPricePerMeter,
+    };
   }
 
   async removeFabric(id: number) {

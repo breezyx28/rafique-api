@@ -12,6 +12,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { WorkshopModule } from './modules/workshop/workshop.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     DashboardModule,
     SettingsModule,
     NotificationsModule,
+    WorkshopModule,
   ],
 })
 export class AppModule {}
