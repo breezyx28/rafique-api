@@ -7,6 +7,24 @@ import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 
 export const LOW_STOCK_THRESHOLD = 6;
 
+function dateOnly(value: Date | string): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return String(value).slice(0, 10);
+}
+
+function diffDays(due: string, today: string): number {
+  const [y1, m1, d1] = due.split('-').map(Number);
+  const [y2, m2, d2] = today.split('-').map(Number);
+  return Math.round(
+    (Date.UTC(y1, m1 - 1, d1) - Date.UTC(y2, m2 - 1, d2)) / 86_400_000,
+  );
+}
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -19,11 +37,17 @@ export class NotificationsService {
   ) {}
 
   async findAll(limit = 20) {
-    const notifications = await this.notificationRepo.find({
+    await this.generateDueNotificationsForDate(new Date());
+    const take = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    return this.notificationRepo.find({
       order: { createdAt: 'DESC' },
-      take: limit,
+      take,
     });
-    return notifications;
+  }
+
+  async countUnread() {
+    await this.generateDueNotificationsForDate(new Date());
+    return this.notificationRepo.count({ where: { isRead: false } });
   }
 
   async markRead(id: number) {
@@ -74,8 +98,7 @@ export class NotificationsService {
   }
 
   async generateDueNotificationsForDate(date: Date) {
-    const isoDate = date.toISOString().slice(0, 10);
-    const today = new Date(isoDate);
+    const today = dateOnly(date);
 
     const orders = await this.orderRepo
       .createQueryBuilder('o')
@@ -88,24 +111,25 @@ export class NotificationsService {
 
     for (const order of orders) {
       if (!order.dueDate) continue;
-      const due = new Date(order.dueDate);
-      const diffMs = due.getTime() - today.getTime();
-      const daysUntilDue = Math.round(diffMs / (24 * 60 * 60 * 1000));
+      const daysUntilDue = diffDays(dateOnly(order.dueDate), today);
 
       let window: string | null = null;
-      let suffix: string | null = null;
+      let title: string | null = null;
       if (daysUntilDue === 2) {
         window = 'due_in_2';
-        suffix = 'due in 2 days';
+        title = `Order #${order.orderNumber} is due in 2 days`;
       } else if (daysUntilDue === 1) {
         window = 'due_tomorrow';
-        suffix = 'due tomorrow';
+        title = `Order #${order.orderNumber} is due tomorrow`;
       } else if (daysUntilDue === 0) {
         window = 'due_today';
-        suffix = 'due today';
+        title = `Delivery day is today: Order #${order.orderNumber}`;
+      } else if (daysUntilDue < 0) {
+        window = 'overdue';
+        title = `Delivery date has passed: Order #${order.orderNumber}`;
       }
 
-      if (!window || !suffix) continue;
+      if (!window || !title) continue;
 
       const existing = await this.notificationRepo.findOne({
         where: {
@@ -116,15 +140,14 @@ export class NotificationsService {
       });
       if (existing) continue;
 
-      const title = `Order #${order.orderNumber} ${suffix}`;
       const subtitle = order.customer
         ? `Customer: ${order.customer.name}`
-        : null;
+        : 'Follow up with the customer for pickup.';
 
       const notification = this.notificationRepo.create({
         title,
         subtitle,
-        kind: 'due',
+        kind: 'due' as NotificationKind,
         orderId: order.id,
         inventoryItemId: null,
         window,
@@ -134,4 +157,3 @@ export class NotificationsService {
     }
   }
 }
-

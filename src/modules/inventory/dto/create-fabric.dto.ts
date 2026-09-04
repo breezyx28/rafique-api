@@ -9,10 +9,11 @@ export class CreateFabricDto {
   @IsString()
   unit?: string;
 
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  qty: number;
+  qty?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -43,4 +44,11 @@ export class CreateFabricDto {
   @IsNumber()
   @Min(0)
   sewingRatePerMeter?: number;
+
+  /** Number of packages. Total meters stored in `qty` = packageQty × packageMeters. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  packageQty?: number;
 }

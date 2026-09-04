@@ -6,6 +6,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Product } from '../../products/entities/product.entity';
+import { Fabric } from './fabric.entity';
 
 @Entity('inventory_items')
 export class InventoryItem {
@@ -24,7 +25,20 @@ export class InventoryItem {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   price: number;
 
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  color: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  note: string | null;
+
+  @Column({ name: 'fabric_id', type: 'int', nullable: true })
+  fabricId: number | null;
+
   @ManyToOne(() => Product, (p) => p.inventoryItems)
   @JoinColumn({ name: 'product_id' })
   product: Product;
+
+  @ManyToOne(() => Fabric, { nullable: true })
+  @JoinColumn({ name: 'fabric_id' })
+  fabric: Fabric | null;
 }

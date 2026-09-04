@@ -131,6 +131,7 @@ export class OrdersService {
       }
       return order.id;
     });
+    await this.notificationsService.generateDueNotificationsForDate(new Date());
     return this.findOne(savedId);
   }
 
@@ -215,6 +216,7 @@ export class OrdersService {
         requested.inventoryItemId,
       );
     }
+    await this.notificationsService.generateDueNotificationsForDate(new Date());
     return this.findOne(savedId);
   }
 
@@ -303,6 +305,7 @@ export class OrdersService {
       return order.id;
     });
 
+    await this.notificationsService.generateDueNotificationsForDate(new Date());
     return this.findOne(savedId);
   }
 
@@ -426,6 +429,7 @@ export class OrdersService {
     if (Object.keys(updates).length) {
       await this.orderRepo.update(id, updates);
     }
+    await this.notificationsService.generateDueNotificationsForDate(new Date());
     return this.findOne(id);
   }
 

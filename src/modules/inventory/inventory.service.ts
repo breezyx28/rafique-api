@@ -24,7 +24,7 @@ export class InventoryService {
   async findAllItems(pagination: PaginationDto) {
     const { page = 1, limit = 50 } = pagination;
     const [items, total] = await this.itemRepo.findAndCount({
-      relations: ['product'],
+      relations: ['product', 'fabric'],
       order: { id: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -43,13 +43,13 @@ export class InventoryService {
     await this.notificationsService.createStockNotificationIfNeeded(saved.id);
     return this.itemRepo.findOne({
       where: { id: saved.id },
-      relations: ['product'],
+      relations: ['product', 'fabric'],
     });
   }
 
   async updateItem(id: number, dto: Partial<CreateInventoryItemDto>) {
     await this.itemRepo.update(id, dto);
-    const item = await this.itemRepo.findOne({ where: { id }, relations: ['product'] });
+    const item = await this.itemRepo.findOne({ where: { id }, relations: ['product', 'fabric'] });
     if (!item) throw new NotFoundException('Inventory item not found');
     await this.notificationsService.createStockNotificationIfNeeded(item.id);
     return item;
@@ -91,8 +91,14 @@ export class InventoryService {
     );
     const sellingPricePerMeter =
       packageMeters > 0 ? packagePrice / packageMeters : 0;
+    const totalMeters =
+      dto.packageQty != null
+        ? Number(dto.packageQty) * packageMeters
+        : Number(dto.qty ?? 0);
+    const { packageQty: _packageQty, ...rest } = dto;
     return {
-      ...dto,
+      ...rest,
+      qty: totalMeters,
       packageMeters,
       packagePrice,
       costPerUnit: packagePrice,

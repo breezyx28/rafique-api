@@ -13,10 +13,10 @@ export class NotificationsController {
     return this.notificationsService.findAll(l);
   }
 
-  @Patch(':id/read')
-  async markRead(@Param('id') id: string) {
-    await this.notificationsService.markRead(parseInt(id, 10));
-    return { ok: true };
+  @Get('unread-count')
+  async unreadCount() {
+    const unread = await this.notificationsService.countUnread();
+    return { unread };
   }
 
   @Patch('mark-all-read')
@@ -24,5 +24,10 @@ export class NotificationsController {
     await this.notificationsService.markAllRead();
     return { ok: true };
   }
-}
 
+  @Patch(':id/read')
+  async markRead(@Param('id') id: string) {
+    await this.notificationsService.markRead(parseInt(id, 10));
+    return { ok: true };
+  }
+}
