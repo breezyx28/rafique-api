@@ -15,6 +15,11 @@ export class DashboardController {
     return this.dashboardService.getStats();
   }
 
+  @Get('overview')
+  async getOverview(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.dashboardService.getOverview(from, to);
+  }
+
   @Get('sales-chart')
   async getSalesChart(
     @Query('year') year?: string,
