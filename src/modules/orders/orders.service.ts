@@ -219,6 +219,9 @@ export class OrdersService {
   }
 
   async createFabricOrder(dto: CreateFabricOrderDto) {
+    if (!dto.customerId) {
+      throw new BadRequestException('A registered customer is required');
+    }
     if (!dto.items.length) {
       throw new BadRequestException('At least one fabric is required');
     }
@@ -244,7 +247,10 @@ export class OrdersService {
         rows.push({
           fabric,
           meters: requested.meters,
-          unitPrice: Number(fabric.sellingPricePerMeter),
+          unitPrice:
+            requested.unitPrice != null
+              ? Number(requested.unitPrice)
+              : Number(fabric.sellingPricePerMeter),
         });
       }
 
@@ -259,13 +265,15 @@ export class OrdersService {
       const order = await orderRepo.save(
         orderRepo.create({
           orderNumber: await this.nextOrderNumber(orderRepo),
-          customerId: dto.customerId ?? null,
+          customerId: dto.customerId,
           type: OrderType.FABRIC,
           status: OrderStatus.DELIVERED,
           total,
           paid: dto.paid,
           remaining: total - dto.paid,
           paymentMethod: dto.paymentMethod ?? null,
+          dueDate: dto.dueDate ?? null,
+          noteCustomer: dto.noteCustomer ?? null,
         }),
       );
 
