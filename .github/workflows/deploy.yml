@@ -27,7 +27,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_USER }}@${{ env.SSH_HOST }} \
-            "cd ${{ env.DEPLOY_PATH }} && git pull origin master && chmod +x scripts/deploy-server.sh && ENV_SECRET='${{ secrets.ENV_SECRET }}' bash scripts/deploy-server.sh"
+            "cd ${{ env.DEPLOY_PATH }} && git fetch origin master && git reset --hard origin/master && git clean -fd && chmod +x scripts/deploy-server.sh && ENV_SECRET='${{ secrets.ENV_SECRET }}' bash scripts/deploy-server.sh"
 
       - name: Cleanup SSH key
         if: always()
