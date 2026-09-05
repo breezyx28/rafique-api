@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Notification, NotificationKind } from './entities/notification.entity';
 import { Order } from '../orders/entities/order.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
+import { SettingsService } from '../settings/settings.service';
+import { notificationCopy, shopLanguage } from './notification-copy';
 
 export const LOW_STOCK_THRESHOLD = 6;
 
@@ -34,7 +36,12 @@ export class NotificationsService {
     private orderRepo: Repository<Order>,
     @InjectRepository(InventoryItem)
     private inventoryRepo: Repository<InventoryItem>,
+    private settings: SettingsService,
   ) {}
+
+  private async copy() {
+    return notificationCopy(shopLanguage(await this.settings.get('language')));
+  }
 
   async findAll(limit = 20) {
     await this.generateDueNotificationsForDate(new Date());
@@ -83,11 +90,12 @@ export class NotificationsService {
     });
     if (existing) return;
 
-    const title = `Low stock: ${item.product?.name ?? 'Item'} (qty ${item.qty})`;
+    const copy = await this.copy();
+    const title = copy.lowStock(item.product?.name ?? copy.item, item.qty);
 
     const notification = this.notificationRepo.create({
       title,
-      subtitle: 'Inventory alert',
+      subtitle: copy.inventoryAlert,
       kind: 'stock',
       inventoryItemId: item.id,
       orderId: null,
@@ -99,6 +107,7 @@ export class NotificationsService {
 
   async generateDueNotificationsForDate(date: Date) {
     const today = dateOnly(date);
+    const copy = await this.copy();
 
     const orders = await this.orderRepo
       .createQueryBuilder('o')
@@ -115,18 +124,19 @@ export class NotificationsService {
 
       let window: string | null = null;
       let title: string | null = null;
+      const orderNumber = String(order.orderNumber);
       if (daysUntilDue === 2) {
         window = 'due_in_2';
-        title = `Order #${order.orderNumber} is due in 2 days`;
+        title = copy.dueIn2(orderNumber);
       } else if (daysUntilDue === 1) {
         window = 'due_tomorrow';
-        title = `Order #${order.orderNumber} is due tomorrow`;
+        title = copy.dueTomorrow(orderNumber);
       } else if (daysUntilDue === 0) {
         window = 'due_today';
-        title = `Delivery day is today: Order #${order.orderNumber}`;
+        title = copy.dueToday(orderNumber);
       } else if (daysUntilDue < 0) {
         window = 'overdue';
-        title = `Delivery date has passed: Order #${order.orderNumber}`;
+        title = copy.overdue(orderNumber);
       }
 
       if (!window || !title) continue;
@@ -141,8 +151,8 @@ export class NotificationsService {
       if (existing) continue;
 
       const subtitle = order.customer
-        ? `Customer: ${order.customer.name}`
-        : 'Follow up with the customer for pickup.';
+        ? copy.customer(order.customer.name)
+        : copy.followUp;
 
       const notification = this.notificationRepo.create({
         title,
