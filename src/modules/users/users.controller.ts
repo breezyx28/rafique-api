@@ -9,6 +9,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles('Admin')
@@ -22,8 +24,6 @@ export class UsersController {
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
-
-  constructor(private readonly usersService: UsersService) {}
 
   @Patch(':id/password')
   async changePassword(
