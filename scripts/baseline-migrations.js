@@ -41,6 +41,11 @@ const KNOWN = [
     name: 'ReadyProductDetails20260904100000',
     check: "SHOW COLUMNS FROM inventory_items LIKE 'color'",
   },
+  {
+    timestamp: 260905100000,
+    name: 'FabricPackageColumns20260905100000',
+    check: "SHOW COLUMNS FROM fabrics LIKE 'package_meters'",
+  },
 ]
 
 async function main() {
