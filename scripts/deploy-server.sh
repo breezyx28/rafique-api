@@ -14,6 +14,11 @@ npm install
 npx nest build
 test -f dist/main.js
 
+# Leftover untracked InitialSchema files from early server copies break migrate.
+rm -f src/migrations/*InitialSchema* dist/migrations/*InitialSchema* \
+  src/migrations/1773190406192* dist/migrations/1773190406192*
+
+node scripts/baseline-migrations.js
 npx typeorm-ts-node-commonjs migration:run -d src/config/typeorm.config.ts
 
 if pm2 describe rafique-api >/dev/null 2>&1; then
