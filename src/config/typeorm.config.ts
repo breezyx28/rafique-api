@@ -19,6 +19,7 @@ import { Expense } from '../modules/expenses/entities/expense.entity';
 import { ExpenseType } from '../modules/expenses/entities/expense-type.entity';
 import { Notification } from '../modules/notifications/entities/notification.entity';
 import { AppSetting } from '../modules/settings/entities/app-setting.entity';
+import { OrderPayment } from '../modules/orders/entities/order-payment.entity';
 
 dotenv.config({
   path: process.env.DOTENV_CONFIG_PATH
@@ -45,6 +46,7 @@ export const typeOrmConfig: DataSourceOptions = {
     OrderMeasurement,
     OrderItemFabricConsumption,
     OrderFabricSale,
+    OrderPayment,
     InventoryItem,
     Fabric,
     FabricStockMovement,

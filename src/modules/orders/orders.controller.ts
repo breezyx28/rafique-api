@@ -16,6 +16,10 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OrdersQueryDto } from './dto/orders-query.dto';
 import { CreateFabricOrderDto } from './dto/create-fabric-order.dto';
 import { UpdateCustomOrderDto } from './dto/update-order-item-fabric.dto';
+import {
+  AttachCustomerDto,
+  RecordReceiptDto,
+} from './dto/record-receipt.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
@@ -46,9 +50,31 @@ export class OrdersController {
     return this.ordersService.findAll({ page, limit }, { type, status, from, to });
   }
 
+  @Get('receivables')
+  async receivables(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('status') status?: 'open' | 'settled' | 'all',
+  ) {
+    return this.ordersService.receivables({ from, to, status });
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.ordersService.findOne(parseInt(id, 10));
+  }
+
+  @Post(':id/receipts')
+  async addReceipt(@Param('id') id: string, @Body() body: RecordReceiptDto) {
+    return this.ordersService.addReceipt(parseInt(id, 10), body);
+  }
+
+  @Patch(':id/customer')
+  async attachCustomer(
+    @Param('id') id: string,
+    @Body() body: AttachCustomerDto,
+  ) {
+    return this.ordersService.attachCustomer(parseInt(id, 10), body.customerId);
   }
 
   @Patch(':id')

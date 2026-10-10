@@ -50,6 +50,15 @@ export class OrderItem {
   @Column({ name: 'ready_at', type: 'datetime', nullable: true })
   readyAt: Date | null;
 
+  @Column({
+    name: 'sewing_rate_applied',
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  sewingRateApplied: number | null;
+
   @ManyToOne(() => Order, (o) => o.items, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'order_id' })
   order: Order;

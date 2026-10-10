@@ -10,6 +10,9 @@ type NotificationCopy = {
   dueToday: (orderNumber: string) => string;
   overdue: (orderNumber: string) => string;
   customer: (name: string) => string;
+  balanceOpen: (orderNumber: string, amount: string) => string;
+  balanceOverdue: (orderNumber: string, amount: string) => string;
+  needsCustomer: string;
 };
 
 const COPY: Record<ShopLanguage, NotificationCopy> = {
@@ -23,6 +26,11 @@ const COPY: Record<ShopLanguage, NotificationCopy> = {
     dueToday: (orderNumber) => `Delivery day is today: Order #${orderNumber}`,
     overdue: (orderNumber) => `Delivery date has passed: Order #${orderNumber}`,
     customer: (name) => `Customer: ${name}`,
+    balanceOpen: (orderNumber, amount) =>
+      `Invoice #${orderNumber} still has ${amount} unpaid`,
+    balanceOverdue: (orderNumber, amount) =>
+      `Overdue balance ${amount} on invoice #${orderNumber}`,
+    needsCustomer: 'This balance still needs a customer name and phone.',
   },
   ar: {
     item: 'صنف',
@@ -34,6 +42,11 @@ const COPY: Record<ShopLanguage, NotificationCopy> = {
     dueToday: (orderNumber) => `يوم التسليم اليوم: طلب #${orderNumber}`,
     overdue: (orderNumber) => `تجاوز تاريخ التسليم: طلب #${orderNumber}`,
     customer: (name) => `العميل: ${name}`,
+    balanceOpen: (orderNumber, amount) =>
+      `الفاتورة #${orderNumber} ما زال عليها ${amount} غير مدفوع`,
+    balanceOverdue: (orderNumber, amount) =>
+      `رصيد متأخر ${amount} على الفاتورة #${orderNumber}`,
+    needsCustomer: 'هذا الرصيد ما زال يحتاج اسم العميل وهاتفه.',
   },
   bn: {
     item: 'আইটেম',
@@ -45,6 +58,11 @@ const COPY: Record<ShopLanguage, NotificationCopy> = {
     dueToday: (orderNumber) => `আজ ডেলিভারি দিন: অর্ডার #${orderNumber}`,
     overdue: (orderNumber) => `ডেলিভারি তারিখ পার হয়ে গেছে: অর্ডার #${orderNumber}`,
     customer: (name) => `গ্রাহক: ${name}`,
+    balanceOpen: (orderNumber, amount) =>
+      `চালান #${orderNumber}-এ এখনও ${amount} বাকি`,
+    balanceOverdue: (orderNumber, amount) =>
+      `চালান #${orderNumber}-এ মেয়াদোত্তীর্ণ বাকি ${amount}`,
+    needsCustomer: 'এই বাকিতে এখনও গ্রাহকের নাম ও ফোন লাগবে।',
   },
 };
 

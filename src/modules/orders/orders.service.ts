@@ -4,12 +4,26 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, MoreThan, Not, Repository } from 'typeorm';
 import {
   Order,
   OrderType,
   OrderStatus,
+  PaymentMethod,
 } from './entities/order.entity';
+import { OrderPayment } from './entities/order-payment.entity';
+import { Customer } from '../customers/entities/customer.entity';
+
+function calendarDay(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${value.getFullYear()}-${month}-${day}`;
+  }
+  const text = String(value);
+  return text.length >= 10 ? text.slice(0, 10) : text;
+}
 import { OrderItem } from './entities/order-item.entity';
 import { OrderMeasurement } from './entities/order-measurement.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
@@ -57,6 +71,26 @@ export class OrdersService {
     return num.toString().padStart(5, '0');
   }
 
+  private async recordReceipt(
+    manager: EntityManager,
+    orderId: number,
+    amount: number,
+    method: PaymentMethod | null | undefined,
+    paidAt = new Date(),
+  ) {
+    const value = Number(amount);
+    if (!(value > 0)) return;
+    const repo = manager.getRepository(OrderPayment);
+    await repo.save(
+      repo.create({
+        orderId,
+        amount: value,
+        paymentMethod: method ?? PaymentMethod.CASH,
+        paidAt,
+      }),
+    );
+  }
+
   async createCustom(dto: CreateCustomOrderDto) {
     if (!dto.items.length) {
       throw new BadRequestException('At least one custom product is required');
@@ -99,6 +133,12 @@ export class OrdersService {
           noteCustomer: dto.noteCustomer ?? null,
           noteWorkshop: dto.noteWorkshop ?? null,
         }),
+      );
+      await this.recordReceipt(
+        manager,
+        order.id,
+        dto.paid,
+        dto.paymentMethod ?? null,
       );
 
       for (const requested of dto.items) {
@@ -179,11 +219,21 @@ export class OrdersService {
       if (dto.paid < 0 || dto.paid > total) {
         throw new BadRequestException('Paid amount must be between zero and total');
       }
+      if (total - dto.paid > 0.009 && !dto.customerId) {
+        throw new BadRequestException('A registered customer is required');
+      }
+      if (dto.customerId) {
+        const customer = await manager.getRepository(Customer).findOneBy({
+          id: dto.customerId,
+        });
+        if (!customer) throw new NotFoundException('Customer not found');
+      }
 
       const orderNumber = await this.nextOrderNumber(orderRepo);
       const order = orderRepo.create({
         orderNumber,
-        customerId: null,
+        receiptNumber: `REC-${orderNumber}`,
+        customerId: dto.customerId ?? null,
         type: OrderType.READY,
         status: OrderStatus.DELIVERED,
         total,
@@ -193,6 +243,12 @@ export class OrdersService {
         dueDate: dto.dueDate ?? null,
       });
       const saved = await orderRepo.save(order);
+      await this.recordReceipt(
+        manager,
+        saved.id,
+        dto.paid,
+        dto.paymentMethod ?? null,
+      );
 
       for (const row of resolved) {
         await itemRepo.save(
@@ -264,9 +320,11 @@ export class OrdersService {
         throw new BadRequestException('Paid amount must be between zero and total');
       }
 
+      const orderNumber = await this.nextOrderNumber(orderRepo);
       const order = await orderRepo.save(
         orderRepo.create({
-          orderNumber: await this.nextOrderNumber(orderRepo),
+          orderNumber,
+          receiptNumber: `REC-${orderNumber}`,
           customerId: dto.customerId,
           type: OrderType.FABRIC,
           status: OrderStatus.DELIVERED,
@@ -277,6 +335,12 @@ export class OrdersService {
           dueDate: dto.dueDate ?? null,
           noteCustomer: dto.noteCustomer ?? null,
         }),
+      );
+      await this.recordReceipt(
+        manager,
+        order.id,
+        dto.paid,
+        dto.paymentMethod ?? null,
       );
 
       for (const row of rows) {
@@ -420,11 +484,34 @@ export class OrdersService {
       }
     }
 
+    delete updates.remaining;
     if (updates.paid != null) {
-      if (updates.paid < 0 || updates.paid > Number(order.total)) {
+      const nextPaid = Number(updates.paid);
+      const currentPaid = Number(order.paid);
+      const total = Number(order.total);
+      if (nextPaid < 0 || nextPaid > total) {
         throw new BadRequestException('Paid amount must be between zero and total');
       }
-      updates.remaining = Number(order.total) - Number(updates.paid);
+      if (currentPaid - nextPaid > 0.009) {
+        throw new BadRequestException('Paid amount cannot be reduced');
+      }
+      const increase = nextPaid - currentPaid;
+      const nextRemaining = total - nextPaid;
+      if (increase > 0.009 && nextRemaining > 0.009 && !order.customerId) {
+        throw new BadRequestException('A registered customer is required');
+      }
+      if (increase > 0.009) {
+        await this.dataSource.transaction(async (manager) => {
+          await this.recordReceipt(
+            manager,
+            order.id,
+            increase,
+            updates.paymentMethod ?? order.paymentMethod,
+          );
+        });
+      }
+      updates.paid = nextPaid;
+      updates.remaining = nextRemaining;
     }
     if (Object.keys(updates).length) {
       await this.orderRepo.update(id, updates);
@@ -506,5 +593,155 @@ export class OrdersService {
       await orderRepo.remove(order);
     });
     return { ok: true };
+  }
+
+  async receivables(query: {
+    from?: string;
+    to?: string;
+    status?: 'open' | 'settled' | 'all';
+  }) {
+    const status = query.status ?? 'open';
+    const openOrders = await this.orderRepo.find({
+      where: {
+        remaining: MoreThan(0),
+        status: Not(OrderStatus.CANCELLED),
+      },
+      relations: ['customer'],
+    });
+    const today = calendarDay(new Date()) ?? '';
+    let notYetDue = 0;
+    let dueToday = 0;
+    let overdue = 0;
+    let balanceDue = 0;
+    for (const order of openOrders) {
+      const remaining = Number(order.remaining);
+      balanceDue += remaining;
+      const due = calendarDay(order.dueDate);
+      if (!due || due > today) notYetDue += remaining;
+      else if (due === today) dueToday += remaining;
+      else overdue += remaining;
+    }
+
+    const rowQuery = this.orderRepo
+      .createQueryBuilder('o')
+      .leftJoinAndSelect('o.customer', 'customer')
+      .where('o.status != :cancelled', { cancelled: OrderStatus.CANCELLED });
+    if (status === 'open') rowQuery.andWhere('o.remaining > 0');
+    if (status === 'settled') rowQuery.andWhere('o.remaining <= 0');
+    rowQuery.orderBy('o.dueDate', 'ASC').addOrderBy('o.id', 'DESC').take(500);
+    const listed = await rowQuery.getMany();
+
+    const paymentQuery = this.dataSource
+      .getRepository(OrderPayment)
+      .createQueryBuilder('payment')
+      .select('COALESCE(SUM(payment.amount), 0)', 'collected');
+    if (query.from) {
+      paymentQuery.andWhere('payment.paid_at >= :from', {
+        from: `${query.from} 00:00:00`,
+      });
+    }
+    if (query.to) {
+      paymentQuery.andWhere('payment.paid_at <= :to', {
+        to: `${query.to} 23:59:59`,
+      });
+    }
+    const collectedRaw = await paymentQuery.getRawOne<{ collected: string }>();
+
+    return {
+      stats: {
+        balanceDue,
+        openCount: openOrders.length,
+        collected: Number(collectedRaw?.collected ?? 0),
+      },
+      aging: [
+        { bucket: 'not_yet_due' as const, total: notYetDue },
+        { bucket: 'due_today' as const, total: dueToday },
+        { bucket: 'overdue' as const, total: overdue },
+      ],
+      rows: listed.map((order) => {
+        const remaining = Number(order.remaining);
+        const due = calendarDay(order.dueDate);
+        let bucket: 'not_yet_due' | 'due_today' | 'overdue' | 'settled' =
+          'settled';
+        if (remaining > 0) {
+          if (!due || due > today) bucket = 'not_yet_due';
+          else if (due === today) bucket = 'due_today';
+          else bucket = 'overdue';
+        }
+        return {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          receiptNumber: order.receiptNumber,
+          type: order.type,
+          dueDate: due,
+          total: Number(order.total),
+          paid: Number(order.paid),
+          remaining,
+          paymentMethod: order.paymentMethod,
+          customerId: order.customerId,
+          customerName: order.customer?.name ?? null,
+          customerPhone: order.customer?.phone ?? null,
+          needsCustomer: remaining > 0 && !order.customerId,
+          bucket,
+        };
+      }),
+    };
+  }
+
+  async addReceipt(
+    orderId: number,
+    dto: { amount: number; paymentMethod: PaymentMethod; paidAt?: string },
+  ) {
+    const savedId = await this.dataSource.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(Order);
+      const order = await orderRepo.findOne({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order) throw new NotFoundException('Order not found');
+      if (order.status === OrderStatus.CANCELLED) {
+        throw new BadRequestException('Order is cancelled');
+      }
+      const remaining = Number(order.remaining);
+      const amount = Number(dto.amount);
+      if (!(amount > 0)) {
+        throw new BadRequestException('Receipt amount must be greater than zero');
+      }
+      if (amount - remaining > 0.009) {
+        throw new BadRequestException('Receipt amount exceeds the balance due');
+      }
+      if (!order.customerId) {
+        throw new BadRequestException('A registered customer is required');
+      }
+      await this.recordReceipt(
+        manager,
+        order.id,
+        amount,
+        dto.paymentMethod,
+        dto.paidAt ? new Date(dto.paidAt) : new Date(),
+      );
+      order.paid = Number(order.paid) + amount;
+      order.remaining = Math.max(0, Number(order.total) - Number(order.paid));
+      if (!order.paymentMethod) order.paymentMethod = dto.paymentMethod;
+      await orderRepo.save(order);
+      return order.id;
+    });
+    await this.notificationsService.generateDueNotificationsForDate(new Date());
+    return this.findOne(savedId);
+  }
+
+  async attachCustomer(orderId: number, customerId: number) {
+    const customer = await this.dataSource
+      .getRepository(Customer)
+      .findOneBy({ id: customerId });
+    if (!customer) throw new NotFoundException('Customer not found');
+    const order = await this.orderRepo.findOneBy({ id: orderId });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.customerId && order.customerId !== customerId) {
+      throw new BadRequestException('This invoice already has a customer');
+    }
+    order.customerId = customerId;
+    await this.orderRepo.save(order);
+    return this.findOne(orderId);
   }
 }

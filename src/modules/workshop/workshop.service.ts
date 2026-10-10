@@ -20,6 +20,7 @@ import {
   WorkshopItemStatus,
 } from '../orders/entities/order-item.entity';
 import { OrderItemFabricConsumption } from '../orders/entities/order-item-fabric-consumption.entity';
+import { Product } from '../products/entities/product.entity';
 
 @Injectable()
 export class WorkshopService {
@@ -196,6 +197,7 @@ export class WorkshopService {
       for (const item of order.items) {
         item.workshopStatus = WorkshopItemStatus.NOT_READY;
         item.readyAt = null;
+        item.sewingRateApplied = null;
         await itemRepo.save(item);
       }
 
@@ -229,6 +231,14 @@ export class WorkshopService {
         ? WorkshopItemStatus.READY
         : WorkshopItemStatus.NOT_READY;
       item.readyAt = ready ? new Date() : null;
+      if (ready) {
+        const product = await manager.getRepository(Product).findOneBy({
+          id: item.productId,
+        });
+        item.sewingRateApplied = Number(product?.sewingPrice ?? 0);
+      } else {
+        item.sewingRateApplied = null;
+      }
       await itemRepo.save(item);
 
       const siblings = await itemRepo.find({
@@ -254,27 +264,30 @@ export class WorkshopService {
   async getPayroll() {
     const rows = await this.consumptionRepo
       .createQueryBuilder('consumption')
-      .innerJoin('consumption.fabric', 'fabric')
       .innerJoin('consumption.orderItem', 'item')
-      .select('fabric.id', 'fabricId')
-      .addSelect('fabric.name', 'fabricName')
-      .addSelect('fabric.sewingRatePerMeter', 'rate')
+      .innerJoin('item.product', 'product')
+      .select('product.id', 'productId')
+      .addSelect('product.name', 'productName')
+      .addSelect(
+        'COALESCE(item.sewing_rate_applied, product.sewing_price)',
+        'rate',
+      )
       .addSelect('SUM(consumption.meters)', 'meters')
       .where('item.workshopStatus = :status', {
         status: WorkshopItemStatus.READY,
       })
       .andWhere('consumption.deductedAt IS NOT NULL')
-      .groupBy('fabric.id')
-      .addGroupBy('fabric.name')
-      .addGroupBy('fabric.sewingRatePerMeter')
+      .groupBy('product.id')
+      .addGroupBy('product.name')
+      .addGroupBy('COALESCE(item.sewing_rate_applied, product.sewing_price)')
       .getRawMany();
 
     const breakdown = rows.map((row) => {
       const meters = Number(row.meters);
       const rate = Number(row.rate);
       return {
-        fabricId: Number(row.fabricId),
-        fabricName: row.fabricName,
+        productId: Number(row.productId),
+        productName: row.productName,
         meters,
         rate,
         amount: meters * rate,

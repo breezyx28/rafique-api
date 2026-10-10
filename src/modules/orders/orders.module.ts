@@ -8,6 +8,7 @@ import { Fabric } from '../inventory/entities/fabric.entity';
 import { FabricStockMovement } from '../inventory/entities/fabric-stock-movement.entity';
 import { OrderItemFabricConsumption } from './entities/order-item-fabric-consumption.entity';
 import { OrderFabricSale } from './entities/order-fabric-sale.entity';
+import { OrderPayment } from './entities/order-payment.entity';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -23,6 +24,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       FabricStockMovement,
       OrderItemFabricConsumption,
       OrderFabricSale,
+      OrderPayment,
     ]),
     NotificationsModule,
   ],

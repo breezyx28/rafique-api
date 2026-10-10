@@ -165,5 +165,41 @@ export class NotificationsService {
       });
       await this.notificationRepo.save(notification);
     }
+
+    const balances = await this.orderRepo
+      .createQueryBuilder('o')
+      .leftJoinAndSelect('o.customer', 'customer')
+      .where('o.remaining > 0')
+      .andWhere('o.status != :cancelled', { cancelled: 'cancelled' })
+      .getMany();
+
+    for (const order of balances) {
+      const due = order.dueDate ? dateOnly(order.dueDate) : null;
+      const overdue = !!due && diffDays(due, today) < 0;
+      const window = overdue ? 'balance_overdue' : 'balance_open';
+      const existing = await this.notificationRepo.findOne({
+        where: { kind: 'balance', orderId: order.id, window },
+      });
+      if (existing) continue;
+      const amount = String(Number(order.remaining));
+      const orderNumber = String(order.orderNumber);
+      const title = overdue
+        ? copy.balanceOverdue(orderNumber, amount)
+        : copy.balanceOpen(orderNumber, amount);
+      const subtitle = order.customer
+        ? copy.customer(order.customer.name)
+        : copy.needsCustomer;
+      await this.notificationRepo.save(
+        this.notificationRepo.create({
+          title,
+          subtitle,
+          kind: 'balance',
+          orderId: order.id,
+          inventoryItemId: null,
+          window,
+          isRead: false,
+        }),
+      );
+    }
   }
 }

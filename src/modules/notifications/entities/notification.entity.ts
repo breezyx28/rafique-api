@@ -6,7 +6,7 @@ import {
   Index,
 } from 'typeorm';
 
-export type NotificationKind = 'due' | 'stock';
+export type NotificationKind = 'due' | 'stock' | 'balance';
 
 @Entity('notifications')
 export class Notification {
@@ -19,7 +19,7 @@ export class Notification {
   @Column({ type: 'varchar', length: 255, nullable: true })
   subtitle: string | null;
 
-  @Column({ type: 'enum', enum: ['due', 'stock'] })
+  @Column({ type: 'enum', enum: ['due', 'stock', 'balance'] })
   kind: NotificationKind;
 
   @Column({ name: 'order_id', type: 'int', nullable: true })

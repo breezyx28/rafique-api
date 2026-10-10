@@ -57,6 +57,7 @@ export class CustomersController {
       id: order.id,
       createdAt: order.createdAt,
       items: order.items.map((item) => ({
+        productId: item.product?.id ?? item.productId ?? null,
         productName: item.product?.name ?? null,
         measurements: item.measurements.map((m) => ({
           id: m.id,

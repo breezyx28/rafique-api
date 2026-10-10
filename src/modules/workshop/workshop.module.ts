@@ -16,5 +16,6 @@ import { WorkshopService } from './workshop.service';
   ],
   controllers: [WorkshopController],
   providers: [WorkshopService],
+  exports: [WorkshopService],
 })
 export class WorkshopModule {}

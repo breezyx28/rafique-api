@@ -35,6 +35,10 @@ export class CreateReadyOrderDto {
   paid: number;
 
   @IsOptional()
+  @IsNumber()
+  customerId?: number;
+
+  @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
 
