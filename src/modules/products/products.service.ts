@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Product, ProductType } from './entities/product.entity';
 import { ProductField } from './entities/product-field.entity';
 import { ProductFieldI18n } from './entities/product-field-i18n.entity';
@@ -17,6 +17,7 @@ export class ProductsService {
     private fieldRepo: Repository<ProductField>,
     @InjectRepository(ProductFieldI18n)
     private i18nRepo: Repository<ProductFieldI18n>,
+    private dataSource: DataSource,
   ) {}
 
   async findAll(type?: ProductType) {
@@ -44,6 +45,16 @@ export class ProductsService {
 
   async update(id: number, dto: UpdateProductDto) {
     await this.productRepo.update(id, dto as Partial<Product>);
+    if (dto.sewingPrice != null) {
+      await this.dataSource.query(
+        `UPDATE order_items
+         SET sewing_rate_applied = ?
+         WHERE product_id = ?
+           AND workshop_status = 'ready'
+           AND sewing_rate_applied IS NULL`,
+        [Number(dto.sewingPrice), id],
+      );
+    }
     return this.findOne(id);
   }
 

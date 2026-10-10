@@ -20,7 +20,7 @@ import {
   WorkshopItemStatus,
 } from '../orders/entities/order-item.entity';
 import { OrderItemFabricConsumption } from '../orders/entities/order-item-fabric-consumption.entity';
-import { Product } from '../products/entities/product.entity';
+import { Product, ProductType } from '../products/entities/product.entity';
 
 @Injectable()
 export class WorkshopService {
@@ -262,37 +262,59 @@ export class WorkshopService {
   }
 
   async getPayroll() {
-    const rows = await this.consumptionRepo
-      .createQueryBuilder('consumption')
-      .innerJoin('consumption.orderItem', 'item')
+    const rows = await this.itemRepo
+      .createQueryBuilder('item')
       .innerJoin('item.product', 'product')
-      .select('product.id', 'productId')
+      .leftJoin('item.fabricConsumptions', 'consumption')
+      .select('item.id', 'itemId')
+      .addSelect('product.id', 'productId')
       .addSelect('product.name', 'productName')
+      .addSelect('item.qty', 'qty')
       .addSelect(
         'COALESCE(item.sewing_rate_applied, product.sewing_price)',
         'rate',
       )
-      .addSelect('SUM(consumption.meters)', 'meters')
+      .addSelect('COALESCE(SUM(consumption.meters), 0)', 'meters')
       .where('item.workshopStatus = :status', {
         status: WorkshopItemStatus.READY,
       })
-      .andWhere('consumption.deductedAt IS NOT NULL')
-      .groupBy('product.id')
+      .andWhere('product.type = :type', { type: ProductType.CUSTOM })
+      .groupBy('item.id')
+      .addGroupBy('product.id')
       .addGroupBy('product.name')
+      .addGroupBy('item.qty')
       .addGroupBy('COALESCE(item.sewing_rate_applied, product.sewing_price)')
       .getRawMany();
 
-    const breakdown = rows.map((row) => {
-      const meters = Number(row.meters);
+    const grouped = new Map<
+      string,
+      {
+        productId: number;
+        productName: string;
+        pieces: number;
+        meters: number;
+        rate: number;
+      }
+    >();
+    for (const row of rows) {
       const rate = Number(row.rate);
-      return {
+      const key = `${row.productId}:${rate}`;
+      const current = grouped.get(key) ?? {
         productId: Number(row.productId),
-        productName: row.productName,
-        meters,
+        productName: String(row.productName),
+        pieces: 0,
+        meters: 0,
         rate,
-        amount: meters * rate,
       };
-    });
+      current.pieces += Number(row.qty);
+      current.meters += Number(row.meters);
+      grouped.set(key, current);
+    }
+
+    const breakdown = [...grouped.values()].map((row) => ({
+      ...row,
+      amount: row.pieces * row.rate,
+    }));
     return {
       breakdown,
       total: breakdown.reduce((sum, row) => sum + row.amount, 0),

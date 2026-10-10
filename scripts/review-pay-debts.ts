@@ -413,13 +413,13 @@ async function main() {
     const jellabeyaPay = payroll.breakdown.find((row) => row.productId === jellabeya.id && row.rate === 100)
     const serwalPay = payroll.breakdown.find((row) => row.productId === serwal.id && row.rate === 250)
     check(
-      'Jellabeya pay is 4 meters times the snapshotted rate',
-      jellabeyaPay?.meters === 4 && jellabeyaPay.amount === 400,
+      'Jellabeya pay is one piece times the snapshotted rate',
+      jellabeyaPay?.pieces === 1 && jellabeyaPay.amount === 100 && jellabeyaPay.meters === 4,
       JSON.stringify(jellabeyaPay),
     )
     check(
-      'Serwal pay uses its own rate on the same fabric',
-      serwalPay?.meters === 2 && serwalPay.amount === 500,
+      'Serwal pay uses its own piece rate on the same fabric',
+      serwalPay?.pieces === 1 && serwalPay.amount === 250 && serwalPay.meters === 2,
       JSON.stringify(serwalPay),
     )
     check(
@@ -428,8 +428,28 @@ async function main() {
     )
     check(
       'the pooled total includes both product amounts',
-      payroll.total >= 900,
+      payroll.total >= 350,
       String(payroll.total),
+    )
+    check(
+      'ready-made products are outside tailor pay',
+      !payroll.breakdown.some((row) => row.productId === readyProduct.id),
+    )
+
+    await dataSource.query(
+      `UPDATE order_items SET sewing_rate_applied = NULL WHERE id = ?`,
+      [serwalItem!.id],
+    )
+    await products.update(serwal.id, { sewingPrice: 1200 })
+    const recalculated = await workshop.getPayroll()
+    const serwalRecalculated = recalculated.breakdown.find((row) => row.productId === serwal.id)
+    check(
+      'a ready piece with no snapshot takes the new piece price',
+      serwalRecalculated?.pieces === 1 &&
+        serwalRecalculated.rate === 1200 &&
+        serwalRecalculated.amount === 1200 &&
+        serwalRecalculated.meters === 2,
+      JSON.stringify(serwalRecalculated),
     )
 
     await workshop.setItemReadiness(jellabeyaItem!.id, false)
@@ -440,7 +460,7 @@ async function main() {
     const afterClear = await workshop.getPayroll()
     check('marking a piece not ready clears the snapshot', clearedJellabeya?.sewingRateApplied == null)
     check(
-      'cleared meters leave the payroll',
+      'a piece marked not ready leaves the payroll',
       !afterClear.breakdown.some((row) => row.productId === jellabeya.id),
     )
   } finally {
