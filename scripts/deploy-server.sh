@@ -12,7 +12,11 @@ fi
 
 npm install
 npx nest build
-test -f dist/main.js
+if [ ! -f dist/main.js ]; then
+  echo "Build did not produce dist/main.js"
+  find dist -name main.js -print 2>/dev/null || true
+  exit 1
+fi
 
 # Leftover untracked InitialSchema files from early server copies break migrate.
 rm -f src/migrations/*InitialSchema* dist/migrations/*InitialSchema* \
