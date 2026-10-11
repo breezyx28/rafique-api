@@ -52,17 +52,41 @@ node dist/seed-admin.js
 
 cat > "$STAGE/ensure-running.sh" <<'EOF'
 #!/usr/bin/env bash
+# Kept alive by DirectAdmin Cron Jobs. SSH-started Node exits when the session ends on this host.
 set -euo pipefail
 APP=/home/cedarsd/domains/api.cedar.sd/app
-if curl -sf --max-time 5 http://127.0.0.1:4010/api/health >/dev/null; then
+PORT=4010
+if curl -sf --max-time 5 "http://127.0.0.1:${PORT}/api/health" >/dev/null; then
   exit 0
 fi
 cd "$APP"
 mkdir -p logs
-nohup node dist/main.js >> logs/api.log 2>&1 < /dev/null &
+/usr/bin/setsid /usr/bin/node dist/main.js >> logs/api.log 2>&1 < /dev/null &
 echo $! > api.pid
+sleep 2
+curl -sf --max-time 5 "http://127.0.0.1:${PORT}/api/health" >/dev/null
 EOF
 chmod 700 "$STAGE/ensure-running.sh"
+
+cat > "$STAGE/DIRECTADMIN-CRON.txt" <<'EOF'
+This shared host ends Node processes that were started from SSH.
+
+Create a Cron Job in DirectAdmin so the API stays up:
+
+1. Open DirectAdmin as cedarsd
+2. Go to Advanced Features -> Cron Jobs
+   (some skins show it as Extra Features -> Cron Jobs)
+3. Create a job:
+   Minute: *
+   Hour: *
+   Day of Month: *
+   Month: *
+   Day of Week: *
+   Command:
+   /home/cedarsd/domains/api.cedar.sd/app/ensure-running.sh >/dev/null 2>&1
+4. Save, wait one minute, then open:
+   https://api.cedar.sd/api/health
+EOF
 
 if [ -f "$APP/api.pid" ]; then
   kill "$(cat "$APP/api.pid")" 2>/dev/null || true
@@ -76,11 +100,18 @@ if [ -d "$APP" ]; then
   mv "$APP" "${APP}.prev"
 fi
 mv "$STAGE" "$APP"
+rm -rf "${APP}.prev"
 
+rm -f "$WEB/boot.php" "$WEB/cgi-bin/start-api.cgi"
+cat > "$WEB/.htaccess" <<EOF
+RewriteEngine On
+RewriteRule ^api(/.*)?\$ http://127.0.0.1:${PORT}/api\$1 [P,L]
+EOF
+
+# Prove the release boots while this deploy session is still open.
 cd "$APP"
-nohup node dist/main.js >> logs/api.log 2>&1 < /dev/null &
+/usr/bin/setsid /usr/bin/node dist/main.js >> logs/api.log 2>&1 < /dev/null &
 echo $! > api.pid
-
 healthy=0
 for _ in $(seq 1 45); do
   if curl -sf --max-time 5 "http://127.0.0.1:${PORT}/api/health" >/dev/null; then
@@ -93,38 +124,23 @@ done
 if [ "$healthy" -ne 1 ]; then
   echo "API did not answer on 127.0.0.1:${PORT}"
   tail -n 80 logs/api.log || true
-  kill "$(cat api.pid)" 2>/dev/null || true
-  if [ -d "${APP}.prev" ]; then
-    rm -rf "$APP"
-    mv "${APP}.prev" "$APP"
-    if [ -f "$APP/dist/main.js" ]; then
-      cd "$APP"
-      nohup node dist/main.js >> logs/api.log 2>&1 < /dev/null &
-      echo $! > api.pid
-    fi
-  fi
   exit 1
 fi
-rm -rf "${APP}.prev"
-
-cat > "$WEB/.htaccess" <<EOF
-RewriteEngine On
-RewriteRule ^(.*)\$ http://127.0.0.1:${PORT}/\$1 [P,L]
-EOF
 
 if curl -sf --max-time 15 "https://api.cedar.sd/api/health" >/dev/null; then
-  echo "Public health check ok"
+  echo "Public health check ok while the deploy session is open"
 else
   echo "Local health check ok, public proxy check failed"
   exit 1
 fi
 
-CRON_LINE='*/5 * * * * /home/cedarsd/domains/api.cedar.sd/app/ensure-running.sh'
-if (crontab -l 2>/dev/null | grep -v 'ensure-running.sh'; echo "$CRON_LINE") | crontab -; then
-  echo "Restart cron installed"
-else
-  echo "Could not install a user crontab. Add this command in DirectAdmin -> Cron Jobs:"
-  echo "$CRON_LINE"
-fi
+echo
+echo "IMPORTANT: this host kills Node after SSH ends."
+echo "Add the DirectAdmin cron job described in:"
+echo "  $APP/DIRECTADMIN-CRON.txt"
+echo "Command to paste:"
+echo "  /home/cedarsd/domains/api.cedar.sd/app/ensure-running.sh >/dev/null 2>&1"
+echo "Schedule: every minute (* * * * *)"
+echo
+echo "Cedar API files, schema, and admin user are ready."
 
-echo "Cedar API deploy ok"

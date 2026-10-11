@@ -72,6 +72,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key $SSH_OPTS \
             "$SSH_USER@$SSH_HOST" \
             "chmod 700 /home/cedarsd/deploy/cedar-remote.sh && DB_PASSWORD_B64='$B64' bash /home/cedarsd/deploy/cedar-remote.sh"
+          echo "::warning::This shared host stops Node when SSH ends. Keep the API up with DirectAdmin Cron Jobs running /home/cedarsd/domains/api.cedar.sd/app/ensure-running.sh every minute."
 
       - name: Cleanup
         if: always()
