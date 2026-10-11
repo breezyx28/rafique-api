@@ -1,0 +1,73 @@
+# Deploy the cedar branch to api.cedar.sd.
+# master keeps using .github/workflows/deploy.yml and is not triggered here.
+
+name: Deploy cedar
+
+on:
+  push:
+    branches:
+      - cedar
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: cedar.sd
+      SSH_USER: cedarsd
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        run: npx nest build
+
+      - name: Confirm build entry
+        run: test -f dist/main.js
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.CEDAR_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H 89.163.214.37 >> ~/.ssh/known_hosts
+
+      - name: Create deploy archive
+        run: |
+          tar -czf api-release.tar.gz \
+            dist \
+            package.json \
+            package-lock.json \
+            scripts/cedar-ensure-schema.js \
+            scripts/baseline-migrations.js \
+            scripts/cedar-remote.sh
+
+      - name: Upload archive
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o IPQoS=none \
+            "$SSH_USER@$SSH_HOST" "mkdir -p /home/cedarsd/deploy"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o IPQoS=none \
+            api-release.tar.gz scripts/cedar-remote.sh \
+            "$SSH_USER@$SSH_HOST:/home/cedarsd/deploy/"
+
+      - name: Install, migrate, and start
+        env:
+          DB_PASSWORD_B64: ${{ secrets.CEDARSD_DB_PASSWORD }}
+        run: |
+          B64="$(printf '%s' "$DB_PASSWORD_B64" | base64 -w0)"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o IPQoS=none \
+            "$SSH_USER@$SSH_HOST" \
+            "chmod 700 /home/cedarsd/deploy/cedar-remote.sh && DB_PASSWORD_B64='${B64}' bash /home/cedarsd/deploy/cedar-remote.sh"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key api-release.tar.gz
