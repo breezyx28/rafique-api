@@ -15,6 +15,7 @@ jobs:
     env:
       SSH_HOST: cedar.sd
       SSH_USER: cedarsd
+      SSH_OPTS: -o StrictHostKeyChecking=yes -o IPQoS=none -o ServerAliveInterval=30 -o ServerAliveCountMax=20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,6 +34,9 @@ jobs:
       - name: Confirm build entry
         run: test -f dist/main.js
 
+      - name: Keep production dependencies only
+        run: npm prune --omit=dev
+
       - name: Prepare SSH key
         run: |
           mkdir -p ~/.ssh
@@ -45,6 +49,7 @@ jobs:
         run: |
           tar -czf api-release.tar.gz \
             dist \
+            node_modules \
             package.json \
             package-lock.json \
             scripts/cedar-ensure-schema.js \
@@ -53,20 +58,20 @@ jobs:
 
       - name: Upload archive
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o IPQoS=none \
-            "$SSH_USER@$SSH_HOST" "mkdir -p /home/cedarsd/deploy"
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o IPQoS=none \
+          ssh -i ~/.ssh/deploy_key $SSH_OPTS \
+            "$SSH_USER@$SSH_HOST" "mkdir -p /home/cedarsd/deploy && rm -rf /home/cedarsd/deploy/api-stage"
+          scp -i ~/.ssh/deploy_key $SSH_OPTS \
             api-release.tar.gz scripts/cedar-remote.sh \
             "$SSH_USER@$SSH_HOST:/home/cedarsd/deploy/"
 
       - name: Install, migrate, and start
         env:
-          DB_PASSWORD_B64: ${{ secrets.CEDARSD_DB_PASSWORD }}
+          CEDARSD_DB_PASSWORD: ${{ secrets.CEDARSD_DB_PASSWORD }}
         run: |
-          B64="$(printf '%s' "$DB_PASSWORD_B64" | base64 -w0)"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o IPQoS=none \
+          B64="$(printf '%s' "$CEDARSD_DB_PASSWORD" | base64 -w0)"
+          ssh -i ~/.ssh/deploy_key $SSH_OPTS \
             "$SSH_USER@$SSH_HOST" \
-            "chmod 700 /home/cedarsd/deploy/cedar-remote.sh && DB_PASSWORD_B64='${B64}' bash /home/cedarsd/deploy/cedar-remote.sh"
+            "chmod 700 /home/cedarsd/deploy/cedar-remote.sh && DB_PASSWORD_B64='$B64' bash /home/cedarsd/deploy/cedar-remote.sh"
 
       - name: Cleanup
         if: always()

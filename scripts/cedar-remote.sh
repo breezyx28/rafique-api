@@ -43,7 +43,10 @@ fs.writeFileSync(".env", [
 unset DB_PASSWORD DB_PASSWORD_B64
 chmod 600 .env
 
-npm ci --omit=dev --no-audit --no-fund
+if [ ! -d node_modules ]; then
+  echo "Release archive is missing node_modules"
+  exit 1
+fi
 node scripts/cedar-ensure-schema.js
 node dist/seed-admin.js
 
