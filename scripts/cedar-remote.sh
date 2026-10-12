@@ -52,19 +52,19 @@ node dist/seed-admin.js
 
 cat > "$STAGE/ensure-running.sh" <<'EOF'
 #!/usr/bin/env bash
-# Kept alive by DirectAdmin Cron Jobs. SSH-started Node exits when the session ends on this host.
-set -euo pipefail
+# Cron must run Node in the foreground. A background process is killed when the cron job exits.
 APP=/home/cedarsd/domains/api.cedar.sd/app
 PORT=4010
+cd "$APP"
+mkdir -p logs
+exec 9>"$APP/api.lock"
+if ! flock -n 9; then
+  exit 0
+fi
 if curl -sf --max-time 5 "http://127.0.0.1:${PORT}/api/health" >/dev/null; then
   exit 0
 fi
-cd "$APP"
-mkdir -p logs
-/usr/bin/setsid /usr/bin/node dist/main.js >> logs/api.log 2>&1 < /dev/null &
-echo $! > api.pid
-sleep 2
-curl -sf --max-time 5 "http://127.0.0.1:${PORT}/api/health" >/dev/null
+exec /usr/bin/node dist/main.js >> logs/api.log 2>&1
 EOF
 chmod 700 "$STAGE/ensure-running.sh"
 
