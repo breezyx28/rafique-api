@@ -15,7 +15,7 @@ jobs:
     env:
       SSH_HOST: cedar.sd
       SSH_USER: cedarsd
-      SSH_OPTS: -o StrictHostKeyChecking=yes -o IPQoS=none -o ServerAliveInterval=30 -o ServerAliveCountMax=20
+      SSH_OPTS: -o StrictHostKeyChecking=yes -o IPQoS=none -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -o ConnectTimeout=20 -o TCPKeepAlive=yes
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,9 +58,25 @@ jobs:
 
       - name: Upload archive
         run: |
-          ssh -i ~/.ssh/deploy_key $SSH_OPTS \
+          retry() {
+            local n=1
+            local max=5
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              if [ "$n" -ge "$max" ]; then
+                echo "Command failed after ${max} attempts"
+                return 1
+              fi
+              echo "SSH dropped (attempt ${n}). Waiting 20s..."
+              n=$((n + 1))
+              sleep 20
+            done
+          }
+          retry ssh -i ~/.ssh/deploy_key $SSH_OPTS \
             "$SSH_USER@$SSH_HOST" "mkdir -p /home/cedarsd/deploy && rm -rf /home/cedarsd/deploy/api-stage"
-          scp -i ~/.ssh/deploy_key $SSH_OPTS \
+          retry scp -i ~/.ssh/deploy_key $SSH_OPTS \
             api-release.tar.gz scripts/cedar-remote.sh \
             "$SSH_USER@$SSH_HOST:/home/cedarsd/deploy/"
 
