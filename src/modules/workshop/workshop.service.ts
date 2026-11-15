@@ -261,8 +261,12 @@ export class WorkshopService {
     return this.getOrder(orderId);
   }
 
-  async getPayroll() {
-    const rows = await this.itemRepo
+  async getPayroll(filters?: {
+    from?: string;
+    to?: string;
+    productId?: number;
+  }) {
+    const qb = this.itemRepo
       .createQueryBuilder('item')
       .innerJoin('item.product', 'product')
       .leftJoin('item.fabricConsumptions', 'consumption')
@@ -278,7 +282,19 @@ export class WorkshopService {
       .where('item.workshopStatus = :status', {
         status: WorkshopItemStatus.READY,
       })
-      .andWhere('product.type = :type', { type: ProductType.CUSTOM })
+      .andWhere('product.type = :type', { type: ProductType.CUSTOM });
+
+    if (filters?.from) {
+      qb.andWhere('DATE(item.ready_at) >= :from', { from: filters.from });
+    }
+    if (filters?.to) {
+      qb.andWhere('DATE(item.ready_at) <= :to', { to: filters.to });
+    }
+    if (filters?.productId != null) {
+      qb.andWhere('product.id = :productId', { productId: filters.productId });
+    }
+
+    const rows = await qb
       .groupBy('item.id')
       .addGroupBy('product.id')
       .addGroupBy('product.name')

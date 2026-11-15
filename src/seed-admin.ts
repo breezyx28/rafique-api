@@ -29,6 +29,7 @@ async function seedAdmin() {
     username: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'rafique_tailors_db',
+    charset: 'utf8mb4',
     entities: [],
     synchronize: false,
   });

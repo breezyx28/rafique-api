@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -42,8 +43,20 @@ export class WorkshopController {
 
   @Get('payroll')
   @Roles('Admin')
-  payroll() {
-    return this.workshopService.getPayroll();
+  payroll(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('productId') productId?: string,
+  ) {
+    const parsedProductId = productId ? Number(productId) : undefined;
+    return this.workshopService.getPayroll({
+      from: from || undefined,
+      to: to || undefined,
+      productId:
+        parsedProductId != null && Number.isFinite(parsedProductId)
+          ? parsedProductId
+          : undefined,
+    });
   }
 
   @Get('productivity')
