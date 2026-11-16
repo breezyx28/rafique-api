@@ -20,6 +20,7 @@ import { ExpenseType } from '../modules/expenses/entities/expense-type.entity';
 import { Notification } from '../modules/notifications/entities/notification.entity';
 import { AppSetting } from '../modules/settings/entities/app-setting.entity';
 import { OrderPayment } from '../modules/orders/entities/order-payment.entity';
+import { WorkshopWagePayout } from '../modules/workshop/entities/workshop-wage-payout.entity';
 
 dotenv.config({
   path: process.env.DOTENV_CONFIG_PATH
@@ -55,6 +56,7 @@ export const typeOrmConfig: DataSourceOptions = {
     ExpenseType,
     Notification,
     AppSetting,
+    WorkshopWagePayout,
   ],
   migrations: [path.join(__dirname, '../migrations/*.{ts,js}')],
   synchronize: process.env.NODE_ENV !== 'production',

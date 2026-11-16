@@ -4,13 +4,19 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import {
+  CurrentUser,
+  JwtPayload,
+} from '../../common/decorators/current-user.decorator';
 import { SetReadinessDto } from './dto/set-readiness.dto';
+import { CreateWagePayoutDto } from './dto/create-wage-payout.dto';
 import { WorkshopService } from './workshop.service';
 
 @Controller('workshop')
@@ -57,6 +63,24 @@ export class WorkshopController {
           ? parsedProductId
           : undefined,
     });
+  }
+
+  @Get('payroll/payouts')
+  @Roles('Admin')
+  listPayouts(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.workshopService.listWagePayouts({
+      from: from || undefined,
+      to: to || undefined,
+    });
+  }
+
+  @Post('payroll/payouts')
+  @Roles('Admin')
+  createPayout(
+    @Body() dto: CreateWagePayoutDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.workshopService.createWagePayout(dto, user.sub);
   }
 
   @Get('productivity')

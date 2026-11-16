@@ -16,7 +16,7 @@ dotenv.config({
 });
 
 import { DataSource } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'admin';

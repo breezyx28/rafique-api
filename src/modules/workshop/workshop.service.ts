@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, IsNull, Not, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Not, Repository } from 'typeorm';
 import { Fabric } from '../inventory/entities/fabric.entity';
 import {
   FabricMovementType,
@@ -21,6 +21,8 @@ import {
 } from '../orders/entities/order-item.entity';
 import { OrderItemFabricConsumption } from '../orders/entities/order-item-fabric-consumption.entity';
 import { Product, ProductType } from '../products/entities/product.entity';
+import { CreateWagePayoutDto } from './dto/create-wage-payout.dto';
+import { WorkshopWagePayout } from './entities/workshop-wage-payout.entity';
 
 @Injectable()
 export class WorkshopService {
@@ -31,6 +33,8 @@ export class WorkshopService {
     private readonly itemRepo: Repository<OrderItem>,
     @InjectRepository(OrderItemFabricConsumption)
     private readonly consumptionRepo: Repository<OrderItemFabricConsumption>,
+    @InjectRepository(WorkshopWagePayout)
+    private readonly payoutRepo: Repository<WorkshopWagePayout>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -266,6 +270,108 @@ export class WorkshopService {
     to?: string;
     productId?: number;
   }) {
+    const [breakdown, totalAccrued, totalPaid] = await Promise.all([
+      this.buildPayrollBreakdown(filters),
+      this.computeTotalAccrued(),
+      this.computeTotalPaid(),
+    ]);
+
+    const periodPieces = breakdown.reduce((sum, row) => sum + row.pieces, 0);
+    const periodMeters = breakdown.reduce((sum, row) => sum + row.meters, 0);
+    const periodTotal = breakdown.reduce((sum, row) => sum + row.amount, 0);
+    const outstandingBalance = this.roundMoney(
+      Math.max(0, totalAccrued - totalPaid),
+    );
+
+    return {
+      breakdown,
+      total: periodTotal,
+      periodTotals: {
+        pieces: periodPieces,
+        meters: this.roundMoney(periodMeters),
+        amount: periodTotal,
+      },
+      totalAccrued,
+      totalPaid,
+      outstandingBalance,
+    };
+  }
+
+  async listWagePayouts(filters?: { from?: string; to?: string }) {
+    const qb = this.payoutRepo
+      .createQueryBuilder('payout')
+      .leftJoinAndSelect('payout.createdBy', 'createdBy')
+      .orderBy('payout.createdAt', 'DESC');
+
+    if (filters?.from) {
+      qb.andWhere('DATE(payout.created_at) >= :from', { from: filters.from });
+    }
+    if (filters?.to) {
+      qb.andWhere('DATE(payout.created_at) <= :to', { to: filters.to });
+    }
+
+    const rows = await qb.getMany();
+    return rows.map((row) => this.serializePayout(row));
+  }
+
+  async createWagePayout(dto: CreateWagePayoutDto, userId: number) {
+    const amount = this.roundMoney(Number(dto.amount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Payout amount must be greater than zero');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const payoutRepo = manager.getRepository(WorkshopWagePayout);
+      const totalAccrued = await this.computeTotalAccrued(manager);
+      const totalPaid = await this.computeTotalPaid(manager);
+      const outstandingBalance = this.roundMoney(
+        Math.max(0, totalAccrued - totalPaid),
+      );
+
+      if (amount > outstandingBalance) {
+        throw new BadRequestException(
+          'Payout amount cannot exceed the outstanding balance',
+        );
+      }
+
+      const balanceBefore = outstandingBalance;
+      const balanceAfter = this.roundMoney(balanceBefore - amount);
+      const note = dto.note?.trim() ? dto.note.trim() : null;
+
+      const saved = await payoutRepo.save(
+        payoutRepo.create({
+          amount,
+          balanceBefore,
+          balanceAfter,
+          note,
+          createdByUserId: userId,
+        }),
+      );
+
+      const withUser = await payoutRepo.findOne({
+        where: { id: saved.id },
+        relations: ['createdBy'],
+      });
+
+      const nextPaid = this.roundMoney(totalPaid + amount);
+      return {
+        payout: this.serializePayout(withUser ?? saved),
+        totalAccrued,
+        totalPaid: nextPaid,
+        outstandingBalance: balanceAfter,
+      };
+    });
+  }
+
+  async productivity() {
+    return this.listDelivered();
+  }
+
+  private async buildPayrollBreakdown(filters?: {
+    from?: string;
+    to?: string;
+    productId?: number;
+  }) {
     const qb = this.itemRepo
       .createQueryBuilder('item')
       .innerJoin('item.product', 'product')
@@ -327,18 +433,58 @@ export class WorkshopService {
       grouped.set(key, current);
     }
 
-    const breakdown = [...grouped.values()].map((row) => ({
-      ...row,
-      amount: row.pieces * row.rate,
-    }));
+    return [...grouped.values()]
+      .map((row) => ({
+        ...row,
+        meters: this.roundMoney(row.meters),
+        amount: this.roundMoney(row.pieces * row.rate),
+      }))
+      .sort((a, b) => a.productName.localeCompare(b.productName));
+  }
+
+  private async computeTotalAccrued(manager?: EntityManager) {
+    const repo = manager ? manager.getRepository(OrderItem) : this.itemRepo;
+    const row = await repo
+      .createQueryBuilder('item')
+      .innerJoin('item.product', 'product')
+      .select(
+        'COALESCE(SUM(item.qty * COALESCE(item.sewing_rate_applied, product.sewing_price)), 0)',
+        'total',
+      )
+      .where('item.workshopStatus = :status', {
+        status: WorkshopItemStatus.READY,
+      })
+      .andWhere('product.type = :type', { type: ProductType.CUSTOM })
+      .getRawOne<{ total?: string | number }>();
+    return this.roundMoney(Number(row?.total ?? 0));
+  }
+
+  private async computeTotalPaid(manager?: EntityManager) {
+    const repo = manager
+      ? manager.getRepository(WorkshopWagePayout)
+      : this.payoutRepo;
+    const row = await repo
+      .createQueryBuilder('payout')
+      .select('COALESCE(SUM(payout.amount), 0)', 'total')
+      .getRawOne<{ total?: string | number }>();
+    return this.roundMoney(Number(row?.total ?? 0));
+  }
+
+  private serializePayout(row: WorkshopWagePayout) {
     return {
-      breakdown,
-      total: breakdown.reduce((sum, row) => sum + row.amount, 0),
+      id: row.id,
+      amount: this.roundMoney(Number(row.amount)),
+      balanceBefore: this.roundMoney(Number(row.balanceBefore)),
+      balanceAfter: this.roundMoney(Number(row.balanceAfter)),
+      note: row.note,
+      createdAt: row.createdAt,
+      createdByUserId: row.createdByUserId,
+      createdByUsername: row.createdBy?.username ?? null,
     };
   }
 
-  async productivity() {
-    return this.listDelivered();
+  private roundMoney(value: number) {
+    return Math.round((Number(value) || 0) * 100) / 100;
   }
 
   private async getOrder(orderId: number) {
