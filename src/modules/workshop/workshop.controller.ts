@@ -78,9 +78,11 @@ export class WorkshopController {
   @Roles('Admin')
   createPayout(
     @Body() dto: CreateWagePayoutDto,
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: JwtPayload & { id?: number },
   ) {
-    return this.workshopService.createWagePayout(dto, user.sub);
+    // JwtStrategy.validate() returns the User entity (id), not the raw JWT payload (sub).
+    const userId = Number(user?.id ?? user?.sub);
+    return this.workshopService.createWagePayout(dto, userId);
   }
 
   @Get('productivity')

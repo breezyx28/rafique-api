@@ -21,6 +21,7 @@ import {
 } from '../orders/entities/order-item.entity';
 import { OrderItemFabricConsumption } from '../orders/entities/order-item-fabric-consumption.entity';
 import { Product, ProductType } from '../products/entities/product.entity';
+import { User } from '../users/entities/user.entity';
 import { CreateWagePayoutDto } from './dto/create-wage-payout.dto';
 import { WorkshopWagePayout } from './entities/workshop-wage-payout.entity';
 
@@ -319,6 +320,9 @@ export class WorkshopService {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Payout amount must be greater than zero');
     }
+    if (!Number.isFinite(userId) || userId <= 0) {
+      throw new BadRequestException('Authenticated user is required');
+    }
 
     return this.dataSource.transaction(async (manager) => {
       const payoutRepo = manager.getRepository(WorkshopWagePayout);
@@ -345,6 +349,7 @@ export class WorkshopService {
           balanceAfter,
           note,
           createdByUserId: userId,
+          createdBy: { id: userId } as User,
         }),
       );
 
