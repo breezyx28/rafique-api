@@ -3,12 +3,19 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSetting } from './entities/app-setting.entity';
 
+const DEFAULT_INVOICE_NOTES = {
+  en: 'The shop is not responsible after 15 days from the receipt date.\nThe paid deposit is non-refundable.',
+  ar: 'المحل غير مسؤول بعد مرور 15 يوم من تاريخ الاستلام.\nالعربون المدفوع لا يرتجع.',
+  bn: 'রসিদ তারিখ থেকে ১৫ দিন পর দোকান দায়ী নয়।\nপ্রদত্ত অগ্রিম ফেরতযোগ্য নয়।',
+};
+
 const DEFAULT_SETTINGS: Record<string, unknown> = {
   // General
   workshopName: '',
   workshopPhone: '',
   workshopAddress: '',
   logoUrl: '',
+  invoiceNotes: DEFAULT_INVOICE_NOTES,
   // Preferences
   language: 'en',
   currency: 'SDG',
